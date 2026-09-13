@@ -208,6 +208,26 @@
   .zoom-pop label{font-size:10.5px;color:var(--text-dim);display:flex;justify-content:space-between;}
   .zoom-pop input[type=range]{width:100%;accent-color:var(--accent);}
 
+  .rec-duration{
+    background:rgba(20,21,24,.75);border:1px solid rgba(255,255,255,.12);color:#fff;border-radius:6px;
+    font-size:10px;height:28px;padding:0 3px;cursor:pointer;flex-shrink:0;max-width:76px;
+  }
+  .rec-duration:focus{outline:none;}
+  .cell-btn.motion.active{background:var(--warn);border-color:var(--warn);color:#1a1300;}
+  .cell-btn.privacy.active{background:#8b5cf6;border-color:#8b5cf6;}
+  .cam-row .rename-btn{
+    width:22px;height:22px;flex-shrink:0;border-radius:6px;background:transparent;border:none;
+    color:var(--text-faint);display:flex;align-items:center;justify-content:center;cursor:pointer;
+  }
+  .cam-row .rename-btn:hover{color:var(--text);background:var(--panel-3);}
+  .cam-row .meta .sub.privacy{color:#8b5cf6;}
+
+  /* ---------- Phone stealth / privacy overlay ---------- */
+  .phone-privacy-overlay{
+    position:fixed;inset:0;background:#000;z-index:9999;display:none;
+  }
+  .phone-privacy-overlay.on{display:block;}
+
   /* ---------- Recordings view ---------- */
   .rec-view{flex:1;display:flex;min-height:0;}
   .rec-cams{width:220px;border-right:1px solid var(--border-soft);overflow-y:auto;padding:12px;flex-shrink:0;}
@@ -377,6 +397,7 @@
 
   <!-- ====================== PHONE / CAMERA MODE ====================== -->
   <div id="screen-phone" class="phone-shell hidden">
+    <div class="phone-privacy-overlay" id="phone-privacy-overlay"></div>
     <div class="phone-warn hidden" id="phone-https-warn">Kamera erişimi için bu sayfanın HTTPS üzerinden açılması gerekir.</div>
     <div class="phone-top">
       <div class="phone-top-left">
@@ -472,6 +493,26 @@ function detectPublicIP(timeoutMs){
     pc.createOffer().then(o=>pc.setLocalDescription(o)).catch(()=>finish(null));
     setTimeout(()=>finish(null), timeoutMs || 4000);
   });
+}
+
+// Kamera olarak kullanılan cihazın modelini tespit etmeye çalışır (varsayılan kamera adı için).
+// Bulunamazsa null döner; bu durumda çağıran taraf genel bir isim kullanır.
+async function detectDeviceModel(){
+  try{
+    if(navigator.userAgentData && navigator.userAgentData.getHighEntropyValues){
+      const info = await navigator.userAgentData.getHighEntropyValues(["model", "platform"]);
+      if(info && info.model){ return info.model; }
+    }
+  }catch(e){ /* desteklenmiyor, UA'ya düş */ }
+  const ua = navigator.userAgent || "";
+  if(/iPhone/.test(ua)) return "iPhone";
+  if(/iPad/.test(ua)) return "iPad";
+  let m = ua.match(/Android[^;]*;\s*([^;)]+)\s*(?:Build|\))/i);
+  if(m && m[1] && m[1].trim()) return m[1].trim();
+  if(/Macintosh/.test(ua)) return "Mac";
+  if(/Windows/.test(ua)) return "Windows Cihaz";
+  if(/Linux/.test(ua)) return "Linux Cihaz";
+  return null;
 }
 
 function safeParse(json){ try{ return JSON.parse(json); }catch(e){ return null; } }
@@ -714,9 +755,12 @@ function startComputerMode(){
       row.className = "cam-row";
       row.draggable = true;
       row.dataset.camId = c.id;
+      const subText = c.privacyOn ? "Gizli mod aktif" : (c.online ? "Çevrimiçi" : "Çevrimdışı");
+      const subClass = c.privacyOn ? "privacy" : (c.online ? "on" : "");
       row.innerHTML =
         '<div class="thumb"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg><span class="live-dot ' + (c.online?"on":"") + '"></span></div>' +
-        '<div class="meta"><div class="name">' + escapeHtml(c.name) + '</div><div class="sub ' + (c.online?"on":"") + '">' + (c.online ? "Çevrimiçi" : "Çevrimdışı") + '</div></div>';
+        '<div class="meta"><div class="name">' + escapeHtml(c.name) + '</div><div class="sub ' + subClass + '">' + subText + '</div></div>' +
+        '<button class="rename-btn" title="Adı düzenle"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>';
       row.addEventListener("click", ()=>{
         if(selectedCell !== null){
           assignCamToCell(selectedCell, c.id);
@@ -724,7 +768,7 @@ function startComputerMode(){
           renderGrid();
         }
       });
-      row.addEventListener("dblclick", ()=>{
+      function renameCam(){
         const newName = prompt("Kamera adı:", c.name);
         if(newName && newName.trim()){
           c.name = newName.trim();
@@ -732,7 +776,9 @@ function startComputerMode(){
           localStorage.setItem("gks_name_overrides", JSON.stringify(nameOverrides));
           renderSidebar(); renderGrid();
         }
-      });
+      }
+      row.addEventListener("dblclick", renameCam);
+      row.querySelector(".rename-btn").addEventListener("click", (e)=>{ e.stopPropagation(); renameCam(); });
       row.addEventListener("dragstart", (e)=>{ e.dataTransfer.setData("text/plain", c.id); });
       listEl.appendChild(row);
     });
@@ -779,6 +825,7 @@ function startComputerMode(){
       if(c.call){ try{ c.call.close(); }catch(err){} }
       c.call = null;
       c.stream = null;
+      stopRecording(c);
     }
   }
 
@@ -798,20 +845,27 @@ function startComputerMode(){
         const c = cams.get(camId);
         cell.dataset.camId = camId;
         const online = c && c.online;
+        const durOpts = [[0,"Sınırsız"],[30,"30sn"],[60,"1dk"],[300,"5dk"],[900,"15dk"],[1800,"30dk"]];
+        const curDur = c.recDurationSec || 0;
         cell.innerHTML =
           '<video autoplay playsinline muted></video>' +
           '<div class="cell-topbar">' +
             '<span class="live-badge"' + (online?'':' style="display:none"') + '><span class="b"></span>CANLI</span>' +
             '<span class="offline-badge"' + (online?' style="display:none"':'') + '>Bağlantı yok</span>' +
-            '<span class="name">' + escapeHtml(c ? c.name : "") + '</span>' +
+            '<span class="name">' + escapeHtml(c ? c.name : "") + (c && c.privacyOn ? ' · Gizli mod' : '') + '</span>' +
           '</div>' +
           '<div class="cell-close" title="Kaldır"><svg class="icon-sm toast-white" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></div>' +
           '<div class="cell-toolbar">' +
             '<button class="cell-btn" data-act="switch" title="Ön/Arka kamera"><svg class="icon-sm toast-white" viewBox="0 0 24 24"><path d="M17 2l4 4-4 4"/><path d="M3 12v-2a4 4 0 014-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 12v2a4 4 0 01-4 4H3"/></svg></button>' +
             '<button class="cell-btn" data-act="flash" title="Flaş"><svg class="icon-sm toast-white" viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg></button>' +
             '<button class="cell-btn" data-act="zoom" title="Yakınlaştırma"><svg class="icon-sm toast-white" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35M8 11h6M11 8v6"/></svg></button>' +
+            '<button class="cell-btn motion' + (c.motionMode?" active":"") + '" data-act="motion" title="Hareket algılama modu"><svg class="icon-sm toast-white" viewBox="0 0 24 24"><path d="M2 12h4l2-7 4 14 2-7h8"/></svg></button>' +
+            '<button class="cell-btn privacy' + (c.privacyOn?" active":"") + '" data-act="privacy" title="Gizli mod (telefon ekranı karartılır)"><svg class="icon-sm toast-white" viewBox="0 0 24 24"><path d="M17.94 17.94A10.94 10.94 0 0112 20c-7 0-10-8-10-8a18.6 18.6 0 015.06-5.94M9.9 4.24A10.94 10.94 0 0112 4c7 0 10 8 10 8a18.5 18.5 0 01-2.16 3.19M1 1l22 22"/><path d="M14.12 14.12a3 3 0 11-4.24-4.24"/></svg></button>' +
             '<div class="cell-spacer"></div>' +
-            '<button class="cell-btn rec" data-act="rec" title="Kaydet"><svg class="icon-sm toast-white" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg></button>' +
+            '<select class="rec-duration" title="Kayıt süresi (otomatik durdurma)">' +
+              durOpts.map(o=>'<option value="'+o[0]+'"'+(o[0]===curDur?' selected':'')+'>'+o[1]+'</option>').join('') +
+            '</select>' +
+            '<button class="cell-btn rec' + (c.mediaRecorder && c.mediaRecorder.state==="recording"?" active":"") + '" data-act="rec" title="Kaydet"><svg class="icon-sm toast-white" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg></button>' +
           '</div>';
         const v = cell.querySelector("video");
         if(c && c.stream) v.srcObject = c.stream;
@@ -834,8 +888,26 @@ function startComputerMode(){
           ev.stopPropagation();
           openZoomPopover(cell, camId);
         });
+        cell.querySelector(".rec-duration").addEventListener("click", (ev)=>ev.stopPropagation());
+        cell.querySelector(".rec-duration").addEventListener("change", (ev)=>{
+          c.recDurationSec = parseInt(ev.currentTarget.value, 10) || 0;
+        });
         cell.querySelector('[data-act="rec"]').addEventListener("click", (ev)=>{
           toggleRecording(camId, ev.currentTarget, c);
+        });
+        cell.querySelector('[data-act="motion"]').addEventListener("click", (ev)=>{
+          const on = !c.motionMode;
+          c.motionMode = on;
+          ev.currentTarget.classList.toggle("active", on);
+          if(on) startMotionDetection(camId, c); else stopMotionDetection(c);
+        });
+        cell.querySelector('[data-act="privacy"]').addEventListener("click", (ev)=>{
+          const on = !c.privacyOn;
+          c.privacyOn = on;
+          ev.currentTarget.classList.toggle("active", on);
+          computerApi.sendControl(camId, "privacy", on);
+          renderSidebar();
+          cell.querySelector(".cell-topbar .name").textContent = c.name + (on ? " · Gizli mod" : "");
         });
       } else {
         cell.innerHTML =
@@ -884,13 +956,17 @@ function startComputerMode(){
     return "";
   }
 
-  function toggleRecording(camId, btn, c){
-    if(c.mediaRecorder && c.mediaRecorder.state === "recording"){
-      c.mediaRecorder.stop();
-      btn.classList.remove("active");
-      return;
-    }
-    if(!c.stream){ return; }
+  function findRecBtn(camId){
+    return document.querySelector('.cell[data-cam-id="' + CSS.escape(camId) + '"] [data-act="rec"]');
+  }
+
+  // Kayıt süresi teknik olarak sabit bir sınırla kısıtlı değildir; kayıtlar bu bilgisayarın
+  // IndexedDB deposunda tutulur, bu yüzden gerçek sınır tarayıcının/diskin depolama alanıdır.
+  // "Kayıt süresi" seçicisi ile manuel kayıtları istenen sürede otomatik durdurabilirsiniz
+  // (Sınırsız seçilirse kayıt siz durdurana kadar sürer).
+  function startRecording(camId, c, auto){
+    if(c.mediaRecorder && c.mediaRecorder.state === "recording") return;
+    if(!c.stream) return;
     const mimeType = pickMime();
     const recorder = new MediaRecorder(c.stream, mimeType ? { mimeType } : undefined);
     const chunks = [];
@@ -903,11 +979,82 @@ function startComputerMode(){
         await RecStore.save(camId, c.name, startTime, duration, blob);
       }
       c.mediaRecorder = null;
+      c.autoRecording = false;
+      if(c.recTimer){ clearTimeout(c.recTimer); c.recTimer = null; }
+      const btn = findRecBtn(camId);
+      if(btn) btn.classList.remove("active");
       if(!el("view-rec").classList.contains("hidden")) renderRecCams();
     };
     recorder.start();
     c.mediaRecorder = recorder;
-    btn.classList.add("active");
+    c.autoRecording = !!auto;
+    const btn = findRecBtn(camId);
+    if(btn) btn.classList.add("active");
+    if(!auto && c.recDurationSec){
+      c.recTimer = setTimeout(()=>{
+        if(c.mediaRecorder && c.mediaRecorder.state === "recording") c.mediaRecorder.stop();
+      }, c.recDurationSec * 1000);
+    }
+  }
+
+  function stopRecording(c){
+    if(c.recTimer){ clearTimeout(c.recTimer); c.recTimer = null; }
+    if(c.mediaRecorder && c.mediaRecorder.state === "recording") c.mediaRecorder.stop();
+  }
+
+  function toggleRecording(camId, btn, c){
+    if(c.mediaRecorder && c.mediaRecorder.state === "recording"){
+      stopRecording(c);
+      return;
+    }
+    startRecording(camId, c, false);
+  }
+
+  /* ---------------- hareket algılama modu ----------------
+     Video karesi küçük bir canvas'a çizilip önceki kareyle piksel bazında
+     karşılaştırılır. Ortalama fark eşik değerini aşarsa hareket algılanmış
+     sayılır ve otomatik kayıt başlatılır; hareket birkaç saniye kesilince
+     kayıt otomatik olarak durdurulup kaydedilir. */
+  function startMotionDetection(camId, c){
+    if(c.motionInterval) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = 160; canvas.height = 90;
+    const ctx = canvas.getContext("2d", { willReadFrequently:true });
+    let prevData = null;
+    c.lastMotionTs = 0;
+    const MOTION_SENSITIVITY = 10; // 0-255 arası; düşürürsen daha hassas olur
+    const MOTION_COOLDOWN_MS = 6000; // hareket kesildikten kaç ms sonra kayıt durur
+    c.motionInterval = setInterval(()=>{
+      if(!c.motionMode){ stopMotionDetection(c); return; }
+      const videoEl = document.querySelector('.cell[data-cam-id="' + CSS.escape(camId) + '"] video');
+      if(!videoEl || !c.stream || videoEl.readyState < 2) return;
+      let frame;
+      try{
+        ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+        frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      }catch(e){ return; }
+      if(prevData){
+        let diff = 0, count = 0;
+        const d1 = frame.data, d2 = prevData.data;
+        for(let i=0; i<d1.length; i+=16){ diff += Math.abs(d1[i]-d2[i]); count++; }
+        const avgDiff = count ? (diff / count) : 0;
+        if(avgDiff > MOTION_SENSITIVITY){
+          c.lastMotionTs = Date.now();
+          if(!c.mediaRecorder || c.mediaRecorder.state !== "recording"){
+            startRecording(camId, c, true);
+          }
+        } else if(c.autoRecording && c.mediaRecorder && c.mediaRecorder.state === "recording"){
+          if(Date.now() - c.lastMotionTs > MOTION_COOLDOWN_MS){
+            stopRecording(c);
+          }
+        }
+      }
+      prevData = frame;
+    }, 700);
+  }
+
+  function stopMotionDetection(c){
+    if(c.motionInterval){ clearInterval(c.motionInterval); c.motionInterval = null; }
   }
 
   /* ---------------- tabs ---------------- */
@@ -996,8 +1143,19 @@ function startCameraMode(){
     deviceId = uuidv4();
     localStorage.setItem("gks_device_id", deviceId);
   }
-  const deviceName = localStorage.getItem("gks_device_name") || ("Kamera " + deviceId.slice(0,4));
-  localStorage.setItem("gks_device_name", deviceName);
+  // Varsayılan isim olarak cihazın modeli kullanılır (ör. "iPhone 14", "SM-G991B").
+  // Bilgisayar tarafında bir kameraya çift tıklanarak veya kalem simgesiyle bu isim
+  // istenildiği zaman elle değiştirilebilir; o zaman bu varsayılan bir daha geçerli olmaz.
+  let deviceName = localStorage.getItem("gks_device_name") || ("Kamera " + deviceId.slice(0,4));
+  if(!localStorage.getItem("gks_device_name")){
+    detectDeviceModel().then(model=>{
+      if(model){
+        deviceName = model;
+        localStorage.setItem("gks_device_name", deviceName);
+        publishPresence();
+      }
+    });
+  }
   el("phone-id-badge").textContent = "ID " + deviceId.slice(0,8);
 
   let netKey = null, peer = null, mqttClient = null;
@@ -1077,6 +1235,12 @@ function startCameraMode(){
       if(msg.viewerPeerId) closeViewer(msg.viewerPeerId);
       return;
     }
+    if(msg.action === "privacy"){
+      // Gizli mod: yayın normal şekilde devam eder, sadece bu telefonun kendi ekranı
+      // simsiyah olur; telefonu eline alan biri sadece siyah bir ekran görür.
+      el("phone-privacy-overlay").classList.toggle("on", !!msg.value);
+      return;
+    }
     if(!stream) return;
     const track = stream.getVideoTracks()[0];
     if(!track) return;
@@ -1126,20 +1290,22 @@ function startCameraMode(){
     }catch(e){ showToast("Kamera değiştirilemedi"); console.warn(e); }
   }
 
-  el("btn-broadcast").addEventListener("click", async ()=>{
-    if(stream){
-      activeCalls.forEach(call=>{ try{ call.close(); }catch(e){} });
-      activeCalls.clear();
-      viewers = 0;
-      updateViewers();
-      stream.getTracks().forEach(t=>t.stop());
-      stream = null;
-      el("phone-video").srcObject = null;
-      el("phone-placeholder").classList.remove("hidden");
-      el("broadcast-label").textContent = "Yayını Başlat";
-      el("btn-broadcast").classList.remove("stop");
-      return;
-    }
+  function stopBroadcast(){
+    if(!stream) return;
+    activeCalls.forEach(call=>{ try{ call.close(); }catch(e){} });
+    activeCalls.clear();
+    viewers = 0;
+    updateViewers();
+    stream.getTracks().forEach(t=>t.stop());
+    stream = null;
+    el("phone-video").srcObject = null;
+    el("phone-placeholder").classList.remove("hidden");
+    el("broadcast-label").textContent = "Yayını Başlat";
+    el("btn-broadcast").classList.remove("stop");
+  }
+
+  async function startBroadcast(){
+    if(stream) return;
     try{
       stream = await getStream();
       el("phone-video").srcObject = stream;
@@ -1151,7 +1317,15 @@ function startCameraMode(){
       showToast("Kamera izni verilmedi");
       console.warn(e);
     }
+  }
+
+  el("btn-broadcast").addEventListener("click", ()=>{
+    if(stream) stopBroadcast(); else startBroadcast();
   });
+
+  // Bu cihaz "Kamera" rolünü seçtiği anda, düğmeye basmaya gerek kalmadan
+  // otomatik olarak yayına başlar (tarayıcı kamera izni istese bile).
+  startBroadcast();
 
   el("ctrl-switch").addEventListener("click", async ()=>{
     if(!stream) return;
