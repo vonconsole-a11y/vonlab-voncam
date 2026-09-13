@@ -2,818 +2,1111 @@
 <html lang="tr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Nöbetçi — Güvenlik Kamera Sistemi</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
 <style>
   :root{
-    --bg-0:#0a0a0c;
-    --bg-1:#141417;
-    --bg-2:#1c1c20;
-    --bg-3:#26262b;
-    --line:#313136;
-    --text-0:#f2f1ee;
-    --text-1:#a8a6a1;
-    --text-2:#6f6d69;
-    --accent:#c96442;
-    --accent-soft:rgba(201,100,66,0.14);
-    --good:#4caf7d;
-    --bad:#d9534f;
-    --warn:#d9a53f;
+    --bg-0:#08090b;
+    --bg-1:#0e0f12;
+    --panel:#131418;
+    --panel-2:#1a1c21;
+    --panel-3:#212328;
+    --border:#26282e;
+    --border-soft:#1d1f24;
+    --text:#e9eaec;
+    --text-dim:#9a9ca3;
+    --text-faint:#5e6067;
+    --accent:#3d7dfa;
+    --accent-dim:#2a5cc4;
+    --accent-glow:rgba(61,125,250,.18);
+    --live:#e5484d;
+    --ok:#2fbf71;
+    --warn:#e0a72e;
     --radius:10px;
-    --font: -apple-system, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+    --radius-sm:6px;
+    font-family:"Segoe UI Variable","Segoe UI",-apple-system,"Inter",system-ui,sans-serif;
   }
   *{box-sizing:border-box;}
   html,body{height:100%;}
   body{
     margin:0;
-    font-family:var(--font);
-    background:var(--bg-0);
-    color:var(--text-0);
+    background:
+      radial-gradient(1200px 600px at 15% -10%, rgba(61,125,250,.07), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, rgba(255,255,255,.03), transparent 55%),
+      var(--bg-0);
+    color:var(--text);
     overflow:hidden;
     -webkit-font-smoothing:antialiased;
   }
   button{font-family:inherit;}
-  ::selection{background:var(--accent-soft);}
+  ::selection{background:var(--accent-glow);}
+  ::-webkit-scrollbar{width:10px;height:10px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:#2a2c32;border-radius:8px;border:2px solid var(--bg-0);}
 
-  /* ---------- Onboarding ---------- */
-  #onboarding{
-    height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center;
-    gap:40px; padding:24px;
-    background:
-      radial-gradient(600px 400px at 15% 10%, rgba(201,100,66,0.08), transparent 60%),
-      radial-gradient(600px 400px at 85% 90%, rgba(201,100,66,0.05), transparent 60%),
-      var(--bg-0);
+  .icon{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;display:block;}
+  .icon-sm{width:14px;height:14px;}
+  .icon-lg{width:26px;height:26px;}
+
+  /* ---------- App shell ---------- */
+  #app{height:100vh;width:100vw;position:relative;}
+  .hidden{display:none !important;}
+
+  /* ---------- Role select screen ---------- */
+  .role-screen{
+    height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:40px;
+    padding:24px;
   }
-  .brand{display:flex; flex-direction:column; align-items:center; gap:6px;}
-  .brand .mark{width:44px;height:44px;border-radius:12px;background:linear-gradient(160deg,var(--accent),#8f4a30);display:flex;align-items:center;justify-content:center;font-size:20px;}
-  .brand h1{font-size:20px;font-weight:600;margin:8px 0 0;letter-spacing:.2px;}
-  .brand p{color:var(--text-1);font-size:13.5px;margin:0;}
-  .choice-row{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;max-width:640px;}
-  .choice-card{
-    width:230px; padding:26px 22px; border-radius:16px; border:1px solid var(--line);
-    background:linear-gradient(180deg,var(--bg-1),var(--bg-2));
-    cursor:pointer; text-align:left; transition:border-color .15s, transform .15s, background .15s;
+  .role-brand{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;}
+  .role-brand .mark{
+    width:52px;height:52px;border-radius:14px;background:var(--panel-2);border:1px solid var(--border);
+    display:flex;align-items:center;justify-content:center;color:var(--accent);
+    box-shadow:0 0 0 1px rgba(61,125,250,.08), 0 8px 24px rgba(0,0,0,.4);
   }
-  .choice-card:hover{border-color:#4a4a52; transform:translateY(-2px); background:linear-gradient(180deg,var(--bg-2),var(--bg-3));}
-  .choice-card .ico{font-size:26px;margin-bottom:14px;display:block;}
-  .choice-card h3{margin:0 0 6px;font-size:16px;font-weight:600;}
-  .choice-card p{margin:0;color:var(--text-1);font-size:13px;line-height:1.5;}
+  .role-brand h1{font-size:20px;font-weight:600;margin:0;letter-spacing:.2px;}
+  .role-brand p{font-size:13px;color:var(--text-dim);margin:0;max-width:360px;line-height:1.6;}
 
-  /* ---------- Phone (camera) view ---------- */
-  #phoneView{display:none;height:100%;position:relative;background:#000;}
-  #phoneVideo{width:100%;height:100%;object-fit:cover;}
-  .phone-top{position:absolute;top:0;left:0;right:0;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;
-    background:linear-gradient(180deg,rgba(0,0,0,.55),transparent);}
-  .status-pill{display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:20px;background:rgba(20,20,23,.6);backdrop-filter:blur(8px);font-size:12px;color:var(--text-1);}
-  .dot{width:7px;height:7px;border-radius:50%;background:var(--text-2);}
-  .dot.on{background:var(--good);box-shadow:0 0 6px var(--good);}
-  .dot.rec{background:var(--bad);box-shadow:0 0 6px var(--bad);animation:pulse 1.4s infinite;}
-  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
-  .name-input{background:rgba(20,20,23,.6);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.08);color:var(--text-0);
-    padding:6px 10px;border-radius:20px;font-size:12.5px;width:150px;}
-  .name-input:focus{outline:none;border-color:var(--accent);}
-  .phone-bottom{position:absolute;bottom:0;left:0;right:0;padding:22px 20px calc(env(safe-area-inset-bottom,0px) + 22px);
-    display:flex;flex-direction:column;gap:16px;background:linear-gradient(0deg,rgba(0,0,0,.6),transparent);}
-  .zoom-row{display:flex;align-items:center;gap:10px;padding:0 4px;}
-  .zoom-row span{font-size:11px;color:var(--text-1);width:26px;}
-  .zoom-row input[type=range]{flex:1;accent-color:var(--accent);}
-  .ctrl-row{display:flex;align-items:center;justify-content:center;gap:14px;}
-  .icon-btn{width:52px;height:52px;border-radius:50%;border:1px solid rgba(255,255,255,.12);background:rgba(28,28,32,.7);
-    backdrop-filter:blur(8px);color:var(--text-0);font-size:19px;display:flex;align-items:center;justify-content:center;cursor:pointer;}
-  .icon-btn.active{background:var(--accent);border-color:var(--accent);}
-  .icon-btn:disabled{opacity:.3;cursor:not-allowed;}
-  #recBtn{width:64px;height:64px;border-radius:50%;border:3px solid var(--text-0);background:transparent;position:relative;cursor:pointer;}
-  #recBtn::after{content:"";position:absolute;inset:6px;border-radius:50%;background:var(--bad);transition:.2s;}
-  #recBtn.recording::after{border-radius:6px;inset:16px;}
-  .device-id{position:absolute;bottom:6px;left:0;right:0;text-align:center;font-size:10px;color:rgba(255,255,255,.35);}
+  .role-cards{display:flex;gap:18px;flex-wrap:wrap;justify-content:center;}
+  .role-card{
+    width:230px;min-height:190px;background:var(--panel);border:1px solid var(--border);
+    border-radius:var(--radius);padding:26px 22px;display:flex;flex-direction:column;gap:14px;
+    cursor:pointer;transition:border-color .15s, transform .15s, background .15s;
+    text-align:left;
+  }
+  .role-card:hover{border-color:#33363d;background:var(--panel-2);transform:translateY(-2px);}
+  .role-card:active{transform:translateY(0);}
+  .role-card .ic{
+    width:42px;height:42px;border-radius:10px;background:var(--panel-3);border:1px solid var(--border);
+    display:flex;align-items:center;justify-content:center;color:var(--accent);
+  }
+  .role-card h3{margin:0;font-size:15px;font-weight:600;}
+  .role-card span{font-size:12.5px;color:var(--text-dim);line-height:1.55;}
 
-  /* ---------- Desktop (center) view ---------- */
-  #desktopView{display:none;height:100%;}
-  .app-shell{display:flex;height:100%;}
-  .sidebar{width:260px;flex-shrink:0;background:var(--bg-1);border-right:1px solid var(--line);display:flex;flex-direction:column;}
-  .sidebar-head{padding:16px 16px 12px;border-bottom:1px solid var(--line);}
-  .sidebar-head h2{margin:0 0 2px;font-size:14.5px;font-weight:600;}
-  .sidebar-head p{margin:0;font-size:11.5px;color:var(--text-2);}
-  .cam-list{flex:1;overflow-y:auto;padding:10px;}
-  .cam-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;cursor:grab;margin-bottom:4px;border:1px solid transparent;}
-  .cam-item:hover{background:var(--bg-2);border-color:var(--line);}
-  .cam-item.dragging{opacity:.4;}
-  .cam-thumb{width:34px;height:34px;border-radius:7px;background:var(--bg-3);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
-  .cam-info{flex:1;min-width:0;}
-  .cam-info .nm{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .cam-info .meta{font-size:11px;color:var(--text-2);display:flex;align-items:center;gap:5px;}
-  .empty-hint{padding:20px 14px;color:var(--text-2);font-size:12.5px;line-height:1.6;text-align:center;}
-  .sidebar-foot{padding:12px 14px;border-top:1px solid var(--line);}
-  .rec-toggle-row{display:flex;align-items:center;justify-content:space-between;font-size:12.5px;color:var(--text-1);margin-bottom:8px;}
-  .switch{position:relative;width:36px;height:20px;flex-shrink:0;}
-  .switch input{opacity:0;width:0;height:0;}
-  .slider-sw{position:absolute;inset:0;background:var(--bg-3);border-radius:20px;cursor:pointer;transition:.2s;border:1px solid var(--line);}
-  .slider-sw::before{content:"";position:absolute;width:14px;height:14px;left:2px;top:2px;background:var(--text-1);border-radius:50%;transition:.2s;}
-  input:checked + .slider-sw{background:var(--accent);}
-  input:checked + .slider-sw::before{transform:translateX(16px);background:#fff;}
-  .ghost-btn{width:100%;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--bg-2);color:var(--text-0);font-size:12.5px;cursor:pointer;}
-  .ghost-btn:hover{background:var(--bg-3);}
+  .net-status{
+    position:fixed;bottom:18px;left:0;right:0;display:flex;justify-content:center;
+    font-size:12px;color:var(--text-faint);gap:8px;align-items:center;
+  }
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--text-faint);flex-shrink:0;}
+  .dot.ok{background:var(--ok);box-shadow:0 0 6px rgba(47,191,113,.6);}
+  .dot.warn{background:var(--warn);}
+  .dot.live{background:var(--live);box-shadow:0 0 6px rgba(229,72,77,.7);}
 
-  .main-col{flex:1;display:flex;flex-direction:column;min-width:0;}
-  .toolbar{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--bg-1);flex-wrap:wrap;}
-  .layout-btns{display:flex;gap:4px;background:var(--bg-2);padding:3px;border-radius:9px;border:1px solid var(--line);}
-  .layout-btn{width:32px;height:28px;border-radius:6px;border:none;background:transparent;color:var(--text-1);cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  /* ================= COMPUTER MODE ================= */
+  .pc-shell{display:flex;height:100%;}
+  .sidebar{
+    width:272px;flex-shrink:0;background:var(--bg-1);border-right:1px solid var(--border-soft);
+    display:flex;flex-direction:column;
+  }
+  .sidebar-head{padding:16px 16px 10px;display:flex;flex-direction:column;gap:10px;border-bottom:1px solid var(--border-soft);}
+  .brand-row{display:flex;align-items:center;gap:9px;}
+  .brand-row .mark{width:26px;height:26px;border-radius:7px;background:var(--panel-2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--accent);}
+  .brand-row b{font-size:13.5px;font-weight:600;}
+  .netkey-row{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-faint);}
+  .netkey-row code{background:var(--panel-3);padding:2px 6px;border-radius:5px;font-size:10.5px;color:var(--text-dim);}
+
+  .nav-tabs{display:flex;gap:4px;padding:10px 12px 0;}
+  .nav-tab{
+    flex:1;text-align:center;padding:8px 6px;font-size:12.5px;color:var(--text-dim);
+    background:transparent;border:1px solid transparent;border-radius:var(--radius-sm);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;gap:6px;
+  }
+  .nav-tab.active{background:var(--panel-2);border-color:var(--border);color:var(--text);}
+  .nav-tab:hover:not(.active){color:var(--text);}
+
+  .cam-list{flex:1;overflow-y:auto;padding:10px 10px 14px;display:flex;flex-direction:column;gap:6px;}
+  .cam-list-empty{padding:30px 14px;text-align:center;color:var(--text-faint);font-size:12.5px;line-height:1.7;}
+  .cam-row{
+    display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:var(--radius-sm);
+    border:1px solid transparent;cursor:grab;transition:background .12s;
+  }
+  .cam-row:hover{background:var(--panel);border-color:var(--border-soft);}
+  .cam-row .thumb{
+    width:36px;height:36px;border-radius:7px;background:var(--panel-3);border:1px solid var(--border);
+    display:flex;align-items:center;justify-content:center;color:var(--text-faint);flex-shrink:0;position:relative;
+  }
+  .cam-row .thumb .live-dot{position:absolute;top:-2px;right:-2px;width:9px;height:9px;border-radius:50%;background:var(--text-faint);border:2px solid var(--bg-1);}
+  .cam-row .thumb .live-dot.on{background:var(--ok);}
+  .cam-row .meta{flex:1;min-width:0;}
+  .cam-row .meta .name{font-size:12.8px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .cam-row .meta .sub{font-size:11px;color:var(--text-faint);margin-top:1px;}
+  .cam-row .meta .sub.on{color:var(--ok);}
+
+  .sidebar-foot{padding:12px;border-top:1px solid var(--border-soft);display:flex;flex-direction:column;gap:6px;}
+  .foot-btn{
+    display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:var(--radius-sm);
+    background:transparent;border:1px solid var(--border-soft);color:var(--text-dim);font-size:12.5px;cursor:pointer;
+  }
+  .foot-btn:hover{background:var(--panel);color:var(--text);}
+
+  .pc-main{flex:1;display:flex;flex-direction:column;min-width:0;}
+  .topbar{
+    height:54px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;
+    padding:0 18px;border-bottom:1px solid var(--border-soft);background:var(--bg-1);
+  }
+  .topbar-title{font-size:14px;font-weight:600;display:flex;align-items:center;gap:10px;}
+  .topbar-title .cnt{font-size:11.5px;font-weight:400;color:var(--text-faint);background:var(--panel-2);padding:2px 8px;border-radius:20px;border:1px solid var(--border);}
+  .layout-picker{display:flex;align-items:center;gap:4px;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:3px;}
+  .layout-btn{
+    width:30px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:6px;
+    background:transparent;border:none;color:var(--text-dim);cursor:pointer;font-size:11px;
+  }
+  .layout-btn:hover{color:var(--text);background:var(--panel-2);}
   .layout-btn.active{background:var(--accent);color:#fff;}
-  .layout-btn svg{width:15px;height:15px;}
-  .toolbar-spacer{flex:1;}
-  .toolbar-btn{display:flex;align-items:center;gap:6px;padding:7px 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg-2);color:var(--text-0);font-size:12.5px;cursor:pointer;}
-  .toolbar-btn:hover{background:var(--bg-3);}
-  .toolbar-btn.warn{border-color:rgba(217,83,79,.4);color:#ff8a86;}
 
-  .grid-wrap{flex:1;padding:14px;overflow:auto;}
-  .cam-grid{display:grid;gap:10px;height:100%;}
-  .block{
-    position:relative;background:var(--bg-1);border:1px solid var(--line);border-radius:10px;overflow:hidden;
-    display:flex;align-items:center;justify-content:center;min-height:120px;
+  .grid-area{flex:1;padding:16px;overflow:auto;}
+  .cam-grid{display:grid;gap:10px;height:100%;min-height:400px;}
+  .cell{
+    position:relative;background:#000;border:1px solid var(--border-soft);border-radius:var(--radius);
+    overflow:hidden;min-height:140px;
   }
-  .block.dragover{border-color:var(--accent);background:var(--accent-soft);}
-  .block video{width:100%;height:100%;object-fit:contain;background:#000;}
-  .block-empty{color:var(--text-2);font-size:12.5px;text-align:center;padding:10px;pointer-events:none;}
-  .block-empty .b-ico{font-size:22px;display:block;margin-bottom:6px;opacity:.6;}
-  .block-bar{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;
-    padding:7px 9px;background:linear-gradient(180deg,rgba(0,0,0,.6),transparent);opacity:0;transition:.15s;}
-  .block:hover .block-bar{opacity:1;}
-  .block-bar .b-name{font-size:12px;font-weight:500;display:flex;align-items:center;gap:6px;}
-  .block-bar .b-actions{display:flex;gap:6px;}
-  .b-btn{width:24px;height:24px;border-radius:6px;border:none;background:rgba(0,0,0,.4);color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
-  .b-btn:hover{background:rgba(0,0,0,.65);}
-  .b-btn.rec-on{background:var(--bad);}
-  .block-status{position:absolute;bottom:8px;left:9px;font-size:10.5px;color:var(--text-2);background:rgba(0,0,0,.4);padding:2px 7px;border-radius:5px;}
+  .cell.selected{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
+  .cell video{width:100%;height:100%;object-fit:cover;display:block;background:#000;}
+  .cell-empty{
+    height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+    color:var(--text-faint);cursor:pointer;background:
+      repeating-linear-gradient(45deg, rgba(255,255,255,.012) 0 10px, transparent 10px 20px);
+  }
+  .cell-empty:hover{color:var(--text-dim);}
+  .cell-empty span{font-size:12px;}
+  .cell-topbar{
+    position:absolute;top:0;left:0;right:0;padding:8px 10px;display:flex;align-items:center;gap:8px;
+    background:linear-gradient(to bottom, rgba(0,0,0,.75), transparent);pointer-events:none;
+  }
+  .cell-topbar .live-badge{
+    display:flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;letter-spacing:.3px;
+    color:#fff;background:rgba(229,72,77,.9);padding:2px 7px 2px 6px;border-radius:4px;
+  }
+  .cell-topbar .live-badge .b{width:6px;height:6px;border-radius:50%;background:#fff;}
+  .cell-topbar .name{font-size:12px;font-weight:600;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6);}
+  .cell-topbar .offline-badge{font-size:10.5px;color:#fff;background:rgba(90,92,98,.85);padding:2px 7px;border-radius:4px;}
+  .cell-toolbar{
+    position:absolute;bottom:0;left:0;right:0;padding:8px;display:flex;align-items:center;gap:5px;
+    background:linear-gradient(to top, rgba(0,0,0,.8), transparent);opacity:0;transition:opacity .12s;
+  }
+  .cell:hover .cell-toolbar{opacity:1;}
+  .cell-btn{
+    width:28px;height:28px;border-radius:6px;border:1px solid rgba(255,255,255,.12);background:rgba(20,21,24,.75);
+    color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;
+  }
+  .cell-btn:hover{background:rgba(40,42,48,.9);}
+  .cell-btn.active{background:var(--accent);border-color:var(--accent);}
+  .cell-btn.rec.active{background:var(--live);border-color:var(--live);}
+  .cell-spacer{flex:1;}
+  .cell-close{
+    position:absolute;top:8px;right:8px;width:22px;height:22px;border-radius:5px;background:rgba(0,0,0,.55);
+    border:1px solid rgba(255,255,255,.12);color:#fff;display:flex;align-items:center;justify-content:center;
+    cursor:pointer;opacity:0;transition:opacity .12s;
+  }
+  .cell:hover .cell-close{opacity:1;}
+  .zoom-pop{
+    position:absolute;bottom:44px;left:8px;background:rgba(18,19,22,.95);border:1px solid var(--border);
+    border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;width:170px;
+    box-shadow:0 8px 24px rgba(0,0,0,.5);
+  }
+  .zoom-pop label{font-size:10.5px;color:var(--text-dim);display:flex;justify-content:space-between;}
+  .zoom-pop input[type=range]{width:100%;accent-color:var(--accent);}
 
-  /* ---------- Modal (recordings) ---------- */
-  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(3px);z-index:50;align-items:center;justify-content:center;}
-  .modal-overlay.show{display:flex;}
-  .modal{width:min(720px,92vw);max-height:82vh;background:var(--bg-1);border:1px solid var(--line);border-radius:14px;display:flex;flex-direction:column;overflow:hidden;}
-  .modal-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--line);}
-  .modal-head h3{margin:0;font-size:15px;}
-  .modal-close{background:none;border:none;color:var(--text-1);font-size:18px;cursor:pointer;}
-  .modal-body{padding:14px 18px;overflow-y:auto;}
-  .rec-row{display:flex;align-items:center;gap:12px;padding:10px 8px;border-bottom:1px solid var(--line);}
-  .rec-row:last-child{border-bottom:none;}
-  .rec-row .r-ico{font-size:18px;}
-  .rec-row .r-info{flex:1;font-size:13px;}
-  .rec-row .r-info .r-date{color:var(--text-2);font-size:11.5px;}
-  .rec-empty{color:var(--text-2);font-size:13px;text-align:center;padding:30px 0;}
-  #player{width:100%;border-radius:8px;background:#000;display:none;margin-bottom:12px;}
+  /* ---------- Recordings view ---------- */
+  .rec-view{flex:1;display:flex;min-height:0;}
+  .rec-cams{width:220px;border-right:1px solid var(--border-soft);overflow-y:auto;padding:12px;flex-shrink:0;}
+  .rec-cam-item{padding:9px 10px;border-radius:var(--radius-sm);font-size:12.5px;color:var(--text-dim);cursor:pointer;margin-bottom:3px;}
+  .rec-cam-item:hover{background:var(--panel);}
+  .rec-cam-item.active{background:var(--panel-2);color:var(--text);border:1px solid var(--border);}
+  .rec-clips{flex:1;overflow-y:auto;padding:18px 22px;}
+  .rec-clips h2{font-size:14px;margin:0 0 14px;font-weight:600;}
+  .clip-card{
+    display:flex;align-items:center;gap:14px;padding:12px 14px;background:var(--panel);border:1px solid var(--border-soft);
+    border-radius:var(--radius-sm);margin-bottom:8px;cursor:pointer;
+  }
+  .clip-card:hover{border-color:var(--border);background:var(--panel-2);}
+  .clip-card .thumb{width:64px;height:44px;border-radius:6px;background:var(--panel-3);display:flex;align-items:center;justify-content:center;color:var(--text-faint);flex-shrink:0;}
+  .clip-card .info b{font-size:12.8px;font-weight:500;display:block;}
+  .clip-card .info span{font-size:11.5px;color:var(--text-faint);}
+  .rec-empty{color:var(--text-faint);font-size:12.5px;padding:40px 0;text-align:center;}
 
-  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--bg-3);border:1px solid var(--line);
-    padding:10px 16px;border-radius:9px;font-size:13px;z-index:100;opacity:0;transition:.25s;pointer-events:none;}
-  .toast.show{opacity:1;}
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:200;
+  }
+  .modal-box{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;width:min(820px,92vw);}
+  .modal-box video{width:100%;border-radius:8px;background:#000;max-height:70vh;}
+  .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+  .modal-head b{font-size:13px;}
+  .modal-close{width:26px;height:26px;border-radius:6px;background:var(--panel-2);border:1px solid var(--border);color:var(--text-dim);display:flex;align-items:center;justify-content:center;cursor:pointer;}
 
-  @media (max-width:820px){
-    .sidebar{width:80px;}
-    .cam-info,.sidebar-head p,.sidebar-foot{display:none;}
-    .cam-item{justify-content:center;}
+  /* ================= PHONE / CAMERA MODE ================= */
+  .phone-shell{height:100%;display:flex;flex-direction:column;background:#000;}
+  .phone-top{
+    display:flex;align-items:center;justify-content:space-between;padding:14px 16px;
+    background:linear-gradient(to bottom, rgba(0,0,0,.7), transparent);position:absolute;top:0;left:0;right:0;z-index:5;
+  }
+  .phone-pill{display:flex;align-items:center;gap:6px;background:rgba(20,21,24,.65);border:1px solid rgba(255,255,255,.1);padding:5px 10px;border-radius:20px;font-size:11.5px;color:#fff;backdrop-filter:blur(6px);}
+  .phone-video-wrap{flex:1;position:relative;background:#050506;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+  .phone-video-wrap video{width:100%;height:100%;object-fit:cover;}
+  .phone-placeholder{color:var(--text-faint);display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;padding:0 30px;}
+  .phone-placeholder .ic{width:52px;height:52px;color:var(--text-faint);}
+  .phone-toast{
+    position:absolute;top:64px;left:50%;transform:translateX(-50%);background:rgba(20,21,24,.85);
+    border:1px solid rgba(255,255,255,.1);color:#fff;font-size:12px;padding:8px 14px;border-radius:20px;
+    opacity:0;transition:opacity .25s;pointer-events:none;backdrop-filter:blur(6px);z-index:6;
+  }
+  .phone-toast.show{opacity:1;}
+  .phone-bottom{
+    position:relative;z-index:5;padding:18px 20px 22px;display:flex;flex-direction:column;gap:14px;
+    background:linear-gradient(to top, rgba(0,0,0,.75), transparent);
+  }
+  .phone-controls{display:flex;align-items:center;justify-content:center;gap:14px;}
+  .pctrl-btn{
+    width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);
+    color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;
+  }
+  .pctrl-btn.active{background:var(--accent);border-color:var(--accent);}
+  .broadcast-btn{
+    align-self:center;padding:13px 34px;border-radius:26px;border:none;font-size:14px;font-weight:600;cursor:pointer;
+    background:var(--accent);color:#fff;display:flex;align-items:center;gap:9px;
+  }
+  .broadcast-btn.stop{background:var(--live);}
+  .phone-warn{
+    position:absolute;top:0;left:0;right:0;background:var(--warn);color:#1a1300;font-size:12px;padding:8px 14px;
+    text-align:center;z-index:10;
+  }
+  .phone-role-back{position:absolute;top:14px;right:14px;z-index:6;}
+
+  .toast-white{color:#fff;}
+  .empty-select-hint{
+    position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--border);
+    padding:9px 16px;border-radius:22px;font-size:12.5px;color:var(--text-dim);display:flex;align-items:center;gap:8px;
+    box-shadow:0 8px 24px rgba(0,0,0,.4);z-index:30;
   }
 </style>
 </head>
 <body>
+<div id="app">
 
-<!-- ONBOARDING -->
-<div id="onboarding">
-  <div class="brand">
-    <div class="mark">🛰️</div>
-    <h1>Nöbetçi</h1>
-    <p>Bu cihazı nasıl kullanacaksınız?</p>
-  </div>
-  <div class="choice-row">
-    <div class="choice-card" onclick="startAs('camera')">
-      <span class="ico">📱</span>
-      <h3>Telefon / Kamera</h3>
-      <p>Bu cihazı bir güvenlik kamerası olarak kullan. Görüntü izleme merkezine canlı aktarılır.</p>
+  <!-- ====================== ROLE SELECT ====================== -->
+  <div id="screen-role" class="role-screen">
+    <div class="role-brand">
+      <div class="mark">
+        <svg class="icon-lg" viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5 3.4 8.7 8 10 4.6-1.3 8-5 8-10V5l-8-3Z"/><path d="M9.5 12.2l1.8 1.8 3.4-3.6"/></svg>
+      </div>
+      <h1>Nöbetçi</h1>
+      <p>Aynı ağdaki cihazlar arasında otomatik eşleşen, gerçek zamanlı güvenlik kamera sistemi. Devam etmek için bu cihazın rolünü seçin.</p>
     </div>
-    <div class="choice-card" onclick="startAs('viewer')">
-      <span class="ico">💻</span>
-      <h3>Bilgisayar / İzleme Merkezi</h3>
-      <p>Ağdaki kameraları listele, canlı izle, ekranı düzenle ve kayıtları görüntüle.</p>
+    <div class="role-cards">
+      <button class="role-card" id="pick-computer">
+        <div class="ic"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></div>
+        <h3>Bilgisayar</h3>
+        <span>Ağdaki kameraları izleyin, ekranı bölün, kameraları uzaktan yönetin ve geçmiş kayıtları görüntüleyin.</span>
+      </button>
+      <button class="role-card" id="pick-camera">
+        <div class="ic"><svg class="icon" viewBox="0 0 24 24"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></div>
+        <h3>Telefon / Kamera</h3>
+        <span>Bu cihazı bir güvenlik kamerasına dönüştürün ve aynı ağdaki bilgisayarlara canlı yayın yapın.</span>
+      </button>
+    </div>
+    <div class="net-status">
+      <span class="dot" id="net-dot"></span>
+      <span id="net-text">Ağ anahtarı belirleniyor…</span>
     </div>
   </div>
-</div>
 
-<!-- PHONE / CAMERA VIEW -->
-<div id="phoneView">
-  <video id="phoneVideo" autoplay playsinline muted></video>
-  <div class="phone-top">
-    <div class="status-pill"><span class="dot" id="connDot"></span><span id="connText">Bağlanıyor…</span></div>
-    <input class="name-input" id="camNameInput" placeholder="Kamera adı" maxlength="24">
-  </div>
-  <div class="phone-bottom">
-    <div class="zoom-row">
-      <span>1x</span>
-      <input type="range" id="zoomSlider" min="1" max="4" step="0.1" value="1">
-      <span>4x</span>
-    </div>
-    <div class="ctrl-row">
-      <button class="icon-btn" id="flipBtn" title="Ön/Arka kamera">🔄</button>
-      <button id="recBtn" title="Kayda başla/durdur (opsiyonel)"></button>
-      <button class="icon-btn" id="flashBtn" title="Flaş">💡</button>
-    </div>
-  </div>
-  <div class="device-id">Cihaz kimliği: <span id="deviceIdLabel"></span></div>
-</div>
-
-<!-- DESKTOP / VIEWER VIEW -->
-<div id="desktopView">
-  <div class="app-shell">
+  <!-- ====================== COMPUTER MODE ====================== -->
+  <div id="screen-computer" class="pc-shell hidden">
     <div class="sidebar">
       <div class="sidebar-head">
-        <h2>Kameralar</h2>
-        <p id="camCountLabel">Bağlı cihaz aranıyor…</p>
+        <div class="brand-row">
+          <div class="mark"><svg class="icon" viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5 3.4 8.7 8 10 4.6-1.3 8-5 8-10V5l-8-3Z"/></svg></div>
+          <b>Nöbetçi</b>
+        </div>
+        <div class="netkey-row">
+          <span class="dot" id="pc-net-dot"></span>
+          <span id="pc-net-label">Ağ algılanıyor</span>
+        </div>
       </div>
-      <div class="cam-list" id="camList">
-        <div class="empty-hint">Henüz bağlı kamera yok. Telefondan "Telefon / Kamera" modunu seçip aynı ağdan bağlanın — oda kodu girmenize gerek yok.</div>
+      <div class="nav-tabs">
+        <button class="nav-tab active" id="tab-live" data-view="live">
+          <svg class="icon-sm" viewBox="0 0 24 24"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="M16 10l6-3v10l-6-3"/></svg>
+          Canlı
+        </button>
+        <button class="nav-tab" id="tab-rec" data-view="rec">
+          <svg class="icon-sm" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M9 8l6 4-6 4V8z"/></svg>
+          Kayıtlar
+        </button>
+      </div>
+      <div class="cam-list" id="cam-list">
+        <div class="cam-list-empty" id="cam-list-empty">Henüz kamera bulunamadı.<br>Aynı ağdaki bir telefondan yayını başlatın; burada otomatik görünecek.</div>
       </div>
       <div class="sidebar-foot">
-        <div class="rec-toggle-row">
-          <span>Otomatik kayıt</span>
-          <label class="switch"><input type="checkbox" id="autoRecToggle"><span class="slider-sw"></span></label>
+        <button class="foot-btn" id="btn-change-role">
+          <svg class="icon-sm" viewBox="0 0 24 24"><path d="M4 4v6h6M20 20v-6h-6"/><path d="M4.5 15a8 8 0 0013.9 3M19.5 9A8 8 0 005.6 6"/></svg>
+          Rolü değiştir
+        </button>
+      </div>
+    </div>
+
+    <div class="pc-main">
+      <div class="topbar" id="topbar-live">
+        <div class="topbar-title">Canlı İzleme <span class="cnt" id="cam-count">0 kamera</span></div>
+        <div class="layout-picker" id="layout-picker">
+          <button class="layout-btn" data-layout="1x1">1</button>
+          <button class="layout-btn active" data-layout="2x2">4</button>
+          <button class="layout-btn" data-layout="2x3">6</button>
+          <button class="layout-btn" data-layout="3x3">9</button>
+          <button class="layout-btn" data-layout="4x4">16</button>
         </div>
-        <button class="ghost-btn" onclick="openRecordingsBrowser()">📼 Geçmiş kayıtları aç</button>
       </div>
-    </div>
+      <div class="grid-area" id="view-live">
+        <div class="cam-grid" id="cam-grid"></div>
+      </div>
 
-    <div class="main-col">
-      <div class="toolbar">
-        <div class="layout-btns" id="layoutBtns"></div>
-        <div class="toolbar-spacer"></div>
-        <button class="toolbar-btn" onclick="addCustomBlock()">➕ Blok ekle</button>
-        <button class="toolbar-btn" id="globalRecBtn" onclick="toggleGlobalRecording()">⏺ Tümünü kaydet</button>
-        <button class="toolbar-btn warn" onclick="disconnectAll()">Bağlantıyı kes</button>
-      </div>
-      <div class="grid-wrap">
-        <div class="cam-grid" id="camGrid"></div>
+      <div class="rec-view hidden" id="view-rec">
+        <div class="rec-cams" id="rec-cams"></div>
+        <div class="rec-clips" id="rec-clips">
+          <div class="rec-empty">İzlemek için soldan bir kamera seçin.</div>
+        </div>
       </div>
     </div>
   </div>
-</div>
 
-<!-- RECORDINGS MODAL -->
-<div class="modal-overlay" id="recModal">
-  <div class="modal">
-    <div class="modal-head">
-      <h3 id="recModalTitle">Kayıtlar</h3>
-      <button class="modal-close" onclick="closeRecordingsBrowser()">✕</button>
+  <!-- ====================== PHONE / CAMERA MODE ====================== -->
+  <div id="screen-phone" class="phone-shell hidden">
+    <div class="phone-warn hidden" id="phone-https-warn">Kamera erişimi için bu sayfanın HTTPS üzerinden açılması gerekir.</div>
+    <div class="phone-top">
+      <div class="phone-pill">
+        <svg class="icon-sm toast-white" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg>
+        <span id="phone-id-badge">ID —</span>
+      </div>
+      <div class="phone-pill">
+        <span class="dot" id="phone-net-dot"></span>
+        <span id="phone-net-label">Bağlanıyor</span>
+        <span id="phone-viewers" style="margin-left:6px;">· 0 izleyici</span>
+      </div>
     </div>
-    <div class="modal-body">
-      <video id="player" controls></video>
-      <div id="recList"></div>
+    <button class="pctrl-btn phone-role-back" id="btn-phone-back" title="Rolü değiştir">
+      <svg class="icon-sm toast-white" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+
+    <div class="phone-video-wrap">
+      <video id="phone-video" autoplay playsinline muted></video>
+      <div class="phone-placeholder" id="phone-placeholder">
+        <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+        <span>Yayını başlatmak için aşağıdaki düğmeye dokunun.</span>
+      </div>
+      <div class="phone-toast" id="phone-toast"></div>
+    </div>
+
+    <div class="phone-bottom">
+      <div class="phone-controls">
+        <button class="pctrl-btn" id="ctrl-switch" title="Ön/arka kamera">
+          <svg class="icon toast-white" viewBox="0 0 24 24"><path d="M17 2l4 4-4 4"/><path d="M3 12v-2a4 4 0 014-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 12v2a4 4 0 01-4 4H3"/></svg>
+        </button>
+        <button class="pctrl-btn" id="ctrl-flash" title="Flaş">
+          <svg class="icon toast-white" viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>
+        </button>
+        <button class="broadcast-btn" id="btn-broadcast">
+          <svg class="icon" viewBox="0 0 24 24" style="stroke:#fff;"><circle cx="12" cy="12" r="6"/></svg>
+          <span id="broadcast-label">Yayını Başlat</span>
+        </button>
+        <button class="pctrl-btn" id="ctrl-zoom-out" title="Uzaklaştır">
+          <svg class="icon toast-white" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35M8 11h6"/></svg>
+        </button>
+        <button class="pctrl-btn" id="ctrl-zoom-in" title="Yakınlaştır">
+          <svg class="icon toast-white" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35M11 8v6M8 11h6"/></svg>
+        </button>
+      </div>
     </div>
   </div>
-</div>
 
-<div class="toast" id="toast"></div>
+</div>
 
 <script>
-/* =========================================================================
-   NÖBETÇİ — Güvenlik kamera sistemi (istemci tarafı)
-   Alt yapı: Cloudflare Worker + Durable Object (sinyalleşme) ve
-   Cloudflare R2 (kayıt depolama). Gerçek zamanlı görüntü doğrudan
-   tarayıcılar arası WebRTC ile aktarılır (aynı ağda düşük gecikme).
-   ========================================================================= */
+(function(){
+"use strict";
 
-const CONFIG = {
-  // Worker'ı deploy ettikten sonra bu adresleri güncelleyin (worker.js dosyasına bakın)
-  SIGNALING_WS_URL: "wss://nobetci-signaling.SIZIN-SUBDOMAIN.workers.dev/ws",
-  API_BASE: "https://nobetci-signaling.SIZIN-SUBDOMAIN.workers.dev",
-  ICE_SERVERS: [{ urls: "stun:stun.l.google.com:19302" }]
-};
+/* ============================================================
+   SABİTLER / YARDIMCI FONKSİYONLAR
+   ============================================================ */
+const APP_ID = "nobetci-gks-v1";
+const MQTT_URL = "wss://broker.emqx.io:8084/mqtt";
+const HEARTBEAT_MS = 4000;
+const OFFLINE_TIMEOUT_MS = 11000;
 
-function toast(msg){
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  clearTimeout(t._h);
-  t._h = setTimeout(()=>t.classList.remove('show'), 2600);
-}
-function uuid(){
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{
-    const r = Math.random()*16|0, v = c=='x'?r:(r&0x3|0x8);
+function uuidv4(){
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c=>{
+    const r = Math.random()*16|0, v = c==="x" ? r : (r&0x3|0x8);
     return v.toString(16);
   });
 }
 
-function startAs(role){
-  document.getElementById('onboarding').style.display = 'none';
-  if(role === 'camera'){
-    document.getElementById('phoneView').style.display = 'block';
-    PhoneApp.init();
-  } else {
-    document.getElementById('desktopView').style.display = 'block';
-    ViewerApp.init();
-  }
+async function sha256Hex(str){
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
 }
 
-/* =========================================================================
-   ORTAK SİNYALLEŞME İSTEMCİSİ
-   Worker tarafındaki tek bir Durable Object tüm cihazları buluşturur;
-   bu yüzden oda kodu yazmaya gerek kalmaz — uygulamayı deploy ettiğiniz
-   adrese bağlanan herkes otomatik olarak aynı "eve" dahil olur.
-   ========================================================================= */
-class Signaling {
-  constructor(role, id, name){
-    this.role = role; this.id = id; this.name = name;
-    this.handlers = {};
-    this.ws = null;
-    this._connect();
-  }
-  on(type, fn){ this.handlers[type] = fn; }
-  _connect(){
+// Aynı ağ (NAT) arkasındaki cihazları otomatik gruplamak için genel IP'yi STUN ile tespit eder.
+function detectPublicIP(timeoutMs){
+  return new Promise((resolve)=>{
+    let done = false;
+    const finish = (val)=>{ if(!done){ done = true; try{ pc.close(); }catch(e){} resolve(val); } };
+    let pc;
     try{
-      this.ws = new WebSocket(CONFIG.SIGNALING_WS_URL);
-    }catch(e){ this._retry(); return; }
-    this.ws.onopen = () => {
-      this.send({type:'hello', role:this.role, id:this.id, name:this.name});
-      this.handlers.open && this.handlers.open();
+      pc = new RTCPeerConnection({ iceServers:[{ urls:"stun:stun.l.google.com:19302" }] });
+    }catch(e){ resolve(null); return; }
+    pc.createDataChannel("gks");
+    pc.onicecandidate = (e)=>{
+      if(!e.candidate){ return; }
+      const m = /candidate:\S+ \d+ udp \d+ (\d{1,3}(?:\.\d{1,3}){3}) \d+ typ srflx/.exec(e.candidate.candidate);
+      if(m){ finish(m[1]); }
     };
-    this.ws.onmessage = (ev) => {
-      let msg; try{ msg = JSON.parse(ev.data); }catch(e){ return; }
-      this.handlers[msg.type] && this.handlers[msg.type](msg);
-    };
-    this.ws.onclose = () => { this.handlers.close && this.handlers.close(); this._retry(); };
-    this.ws.onerror = () => {};
-  }
-  _retry(){
-    clearTimeout(this._t);
-    this._t = setTimeout(()=>this._connect(), 2500);
-  }
-  send(obj){
-    if(this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(obj));
-  }
-}
-
-/* =========================================================================
-   TELEFON / KAMERA MODU
-   ========================================================================= */
-const PhoneApp = {
-  stream: null,
-  track: null,
-  facingMode: 'environment',
-  torchOn: false,
-  signaling: null,
-  peers: {}, // viewerId -> RTCPeerConnection
-  recorder: null,
-  recChunks: [],
-  recording: false,
-  deviceId: null,
-
-  init(){
-    this.deviceId = localStorage.getItem('nobetci_device_id');
-    if(!this.deviceId){
-      this.deviceId = uuid();
-      localStorage.setItem('nobetci_device_id', this.deviceId);
-    }
-    document.getElementById('deviceIdLabel').textContent = this.deviceId.slice(0,8);
-
-    const savedName = localStorage.getItem('nobetci_device_name') || 'Telefon Kamera';
-    const nameInput = document.getElementById('camNameInput');
-    nameInput.value = savedName;
-    nameInput.addEventListener('change', () => {
-      localStorage.setItem('nobetci_device_name', nameInput.value || 'Telefon Kamera');
-      this.signaling && this.signaling.send({type:'rename', id:this.deviceId, name:nameInput.value});
-    });
-
-    document.getElementById('flipBtn').onclick = () => this.flipCamera();
-    document.getElementById('flashBtn').onclick = () => this.toggleTorch();
-    document.getElementById('zoomSlider').oninput = (e) => this.setZoom(parseFloat(e.target.value));
-    document.getElementById('recBtn').onclick = () => this.toggleLocalRecording();
-
-    this.startCamera().then(() => this.connectSignaling());
-  },
-
-  async startCamera(){
-    try{
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        video:{ facingMode:this.facingMode, width:{ideal:1280}, height:{ideal:720} },
-        audio:true
-      });
-      document.getElementById('phoneVideo').srcObject = this.stream;
-      this.track = this.stream.getVideoTracks()[0];
-      this._probeCapabilities();
-      Object.values(this.peers).forEach(pc => this._attachTracksToPeer(pc));
-    }catch(e){
-      toast('Kameraya erişilemedi: ' + e.message);
-    }
-  },
-
-  _probeCapabilities(){
-    const caps = this.track.getCapabilities ? this.track.getCapabilities() : {};
-    document.getElementById('flashBtn').disabled = !caps.torch;
-    const zoomSlider = document.getElementById('zoomSlider');
-    if(caps.zoom){
-      zoomSlider.min = caps.zoom.min; zoomSlider.max = caps.zoom.max; zoomSlider.step = caps.zoom.step || 0.1;
-    }
-  },
-
-  async flipCamera(){
-    this.facingMode = this.facingMode === 'environment' ? 'user' : 'environment';
-    this.stream && this.stream.getTracks().forEach(t=>t.stop());
-    await this.startCamera();
-  },
-
-  async toggleTorch(){
-    if(!this.track) return;
-    const caps = this.track.getCapabilities ? this.track.getCapabilities() : {};
-    if(!caps.torch){ toast('Bu cihazda flaş kontrolü desteklenmiyor'); return; }
-    this.torchOn = !this.torchOn;
-    await this.track.applyConstraints({advanced:[{torch:this.torchOn}]});
-    document.getElementById('flashBtn').classList.toggle('active', this.torchOn);
-  },
-
-  async setZoom(val){
-    if(!this.track) return;
-    const caps = this.track.getCapabilities ? this.track.getCapabilities() : {};
-    if(caps.zoom){
-      try{ await this.track.applyConstraints({advanced:[{zoom:val}]}); return; }catch(e){}
-    }
-    // Donanımsal zoom yoksa dijital (CSS) zoom'a düş
-    document.getElementById('phoneVideo').style.transform = `scale(${val})`;
-  },
-
-  connectSignaling(){
-    const name = document.getElementById('camNameInput').value || 'Telefon Kamera';
-    this.signaling = new Signaling('camera', this.deviceId, name);
-    this.signaling.on('open', () => {
-      document.getElementById('connDot').classList.add('on');
-      document.getElementById('connText').textContent = 'Ağda görünür';
-    });
-    this.signaling.on('close', () => {
-      document.getElementById('connDot').classList.remove('on');
-      document.getElementById('connText').textContent = 'Bağlantı koptu, deneniyor…';
-    });
-    this.signaling.on('viewer-request', async (msg) => this._handleViewerRequest(msg));
-    this.signaling.on('answer', async (msg) => {
-      const pc = this.peers[msg.from];
-      if(pc) await pc.setRemoteDescription(new RTCSessionDescription(msg.payload));
-    });
-    this.signaling.on('ice', async (msg) => {
-      const pc = this.peers[msg.from];
-      if(pc && msg.payload) { try{ await pc.addIceCandidate(msg.payload); }catch(e){} }
-    });
-    this.signaling.on('start-recording', () => this.toggleLocalRecording(true));
-    this.signaling.on('stop-recording', () => this.toggleLocalRecording(false));
-  },
-
-  async _handleViewerRequest(msg){
-    const viewerId = msg.from;
-    const pc = new RTCPeerConnection({iceServers: CONFIG.ICE_SERVERS});
-    this.peers[viewerId] = pc;
-    this._attachTracksToPeer(pc);
-    pc.onicecandidate = (e) => {
-      if(e.candidate) this.signaling.send({type:'ice', target:viewerId, from:this.deviceId, payload:e.candidate});
-    };
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    this.signaling.send({type:'offer', target:viewerId, from:this.deviceId, payload:offer});
-  },
-
-  _attachTracksToPeer(pc){
-    if(!this.stream) return;
-    const senders = pc.getSenders();
-    this.stream.getTracks().forEach(track => {
-      if(!senders.find(s => s.track === track)) pc.addTrack(track, this.stream);
-    });
-  },
-
-  toggleLocalRecording(force){
-    const want = (force === undefined) ? !this.recording : force;
-    if(want === this.recording) return;
-    this.recording = want;
-    document.getElementById('recBtn').classList.toggle('recording', this.recording);
-    document.getElementById('connDot').classList.toggle('rec', this.recording);
-    if(this.recording) this._startRecorder(); else this._stopRecorder();
-  },
-
-  _startRecorder(){
-    if(!this.stream) return;
-    this.recChunks = [];
-    this.recorder = new MediaRecorder(this.stream, {mimeType:'video/webm;codecs=vp8,opus'});
-    this.recorder.ondataavailable = (e) => { if(e.data.size) this.recChunks.push(e.data); };
-    this.recorder.onstop = () => this._uploadRecording();
-    this.recorder.start();
-    toast('Kayıt başladı');
-  },
-  _stopRecorder(){
-    this.recorder && this.recorder.state !== 'inactive' && this.recorder.stop();
-    toast('Kayıt durduruldu, R2\'ye yükleniyor…');
-  },
-  async _uploadRecording(){
-    if(!this.recChunks.length) return;
-    const blob = new Blob(this.recChunks, {type:'video/webm'});
-    const filename = `${Date.now()}.webm`;
-    try{
-      await fetch(`${CONFIG.API_BASE}/api/upload/${this.deviceId}/${filename}`, {
-        method:'PUT', body: blob, headers:{'Content-Type':'video/webm'}
-      });
-      toast('Kayıt R2\'ye kaydedildi');
-    }catch(e){
-      toast('Yükleme başarısız: ' + e.message);
-    }
-  }
-};
-
-/* =========================================================================
-   BİLGİSAYAR / İZLEME MERKEZİ MODU
-   ========================================================================= */
-const ViewerApp = {
-  id: null,
-  signaling: null,
-  cameras: {},       // camId -> {id,name,online}
-  peers: {},         // camId -> RTCPeerConnection
-  streams: {},       // camId -> MediaStream
-  layout: {rows:2, cols:2, custom:null},
-  blocks: [],        // [{camId|null}]
-  recorders: {},     // camId -> MediaRecorder (viewer-side recording of remote stream)
-  autoRecord: false,
-  layoutPresets: [
-    {key:'1', label:'1', rows:1, cols:1, icon:'▢'},
-    {key:'4', label:'4', rows:2, cols:2, icon:'▦'},
-    {key:'6', label:'6', rows:2, cols:3, icon:'▦'},
-    {key:'9', label:'9', rows:3, cols:3, icon:'▦'}
-  ],
-
-  init(){
-    this.id = localStorage.getItem('nobetci_viewer_id') || uuid();
-    localStorage.setItem('nobetci_viewer_id', this.id);
-    this._buildLayoutButtons();
-    this.setLayout(2,2);
-    document.getElementById('autoRecToggle').onchange = (e) => this.autoRecord = e.target.checked;
-    this.connectSignaling();
-  },
-
-  _buildLayoutButtons(){
-    const wrap = document.getElementById('layoutBtns');
-    wrap.innerHTML = '';
-    this.layoutPresets.forEach(p => {
-      const b = document.createElement('button');
-      b.className = 'layout-btn'; b.textContent = p.icon; b.title = `${p.rows}x${p.cols} düzen`;
-      b.onclick = () => this.setLayout(p.rows, p.cols, b);
-      wrap.appendChild(b);
-    });
-  },
-
-  setLayout(rows, cols, btnEl){
-    document.querySelectorAll('.layout-btn').forEach(b=>b.classList.remove('active'));
-    btnEl && btnEl.classList.add('active');
-    this.layout = {rows, cols};
-    const total = rows*cols;
-    const old = this.blocks;
-    this.blocks = Array.from({length: total}, (_,i) => old[i] || {camId:null});
-    this._renderGrid();
-  },
-
-  addCustomBlockUI(){
-    this.blocks.push({camId:null});
-    this._renderGrid();
-  },
-
-  _renderGrid(){
-    const grid = document.getElementById('camGrid');
-    grid.style.gridTemplateColumns = `repeat(${this.layout.cols || Math.ceil(Math.sqrt(this.blocks.length))}, 1fr)`;
-    grid.innerHTML = '';
-    this.blocks.forEach((blk, idx) => {
-      const el = document.createElement('div');
-      el.className = 'block';
-      el.dataset.idx = idx;
-      el.ondragover = (e) => { e.preventDefault(); el.classList.add('dragover'); };
-      el.ondragleave = () => el.classList.remove('dragover');
-      el.ondrop = (e) => {
-        e.preventDefault(); el.classList.remove('dragover');
-        const camId = e.dataTransfer.getData('text/cam-id');
-        if(camId) this.assignCameraToBlock(camId, idx);
-      };
-      el.onclick = () => { if(!blk.camId) this._promptAssign(idx); };
-
-      if(blk.camId && this.cameras[blk.camId]){
-        const cam = this.cameras[blk.camId];
-        const video = document.createElement('video');
-        video.autoplay = true; video.playsInline = true;
-        if(this.streams[blk.camId]) video.srcObject = this.streams[blk.camId];
-        el.appendChild(video);
-
-        const bar = document.createElement('div'); bar.className = 'block-bar';
-        bar.innerHTML = `<span class="b-name">📷 ${cam.name}</span>`;
-        const actions = document.createElement('div'); actions.className = 'b-actions';
-        const recBtn = document.createElement('button');
-        recBtn.className = 'b-btn' + (this.recorders[blk.camId] ? ' rec-on':'');
-        recBtn.textContent = '⏺'; recBtn.title = 'Kaydı başlat/durdur (opsiyonel)';
-        recBtn.onclick = (e) => { e.stopPropagation(); this.toggleRecording(blk.camId); };
-        const fsBtn = document.createElement('button');
-        fsBtn.className = 'b-btn'; fsBtn.textContent = '⛶'; fsBtn.title = 'Tam ekran';
-        fsBtn.onclick = (e) => { e.stopPropagation(); video.requestFullscreen && video.requestFullscreen(); };
-        const clearBtn = document.createElement('button');
-        clearBtn.className = 'b-btn'; clearBtn.textContent = '✕'; clearBtn.title = 'Bloktan kaldır';
-        clearBtn.onclick = (e) => { e.stopPropagation(); blk.camId = null; this._renderGrid(); };
-        actions.append(recBtn, fsBtn, clearBtn);
-        bar.appendChild(actions);
-        el.appendChild(bar);
-
-        const st = document.createElement('div'); st.className = 'block-status';
-        st.textContent = cam.online ? 'Canlı' : 'Bağlantı bekleniyor…';
-        el.appendChild(st);
-      } else {
-        const empty = document.createElement('div'); empty.className = 'block-empty';
-        empty.innerHTML = `<span class="b-ico">＋</span>Kamera atamak için tıklayın veya soldan sürükleyin`;
-        el.appendChild(empty);
-      }
-      grid.appendChild(el);
-    });
-  },
-
-  _promptAssign(idx){
-    const ids = Object.keys(this.cameras);
-    if(!ids.length){ toast('Henüz bağlı kamera yok'); return; }
-    const names = ids.map(id => `${this.cameras[id].name} (${id.slice(0,6)})`).join('\n');
-    const pick = prompt('Bu bloğa atanacak kameranın kimliğini girin:\n' + names);
-    const found = ids.find(id => id.slice(0,6) === (pick||'').trim());
-    if(found) this.assignCameraToBlock(found, idx);
-  },
-
-  assignCameraToBlock(camId, idx){
-    this.blocks[idx].camId = camId;
-    this._renderGrid();
-    this._ensurePeer(camId);
-  },
-
-  connectSignaling(){
-    this.signaling = new Signaling('viewer', this.id, 'İzleme Merkezi');
-    this.signaling.on('camera-list', (msg) => {
-      msg.cameras.forEach(c => { this.cameras[c.id] = c; });
-      Object.keys(this.cameras).forEach(id => {
-        if(!msg.cameras.find(c=>c.id===id)) this.cameras[id].online = false;
-      });
-      this._renderCamList();
-      this._renderGrid();
-    });
-    this.signaling.on('camera-joined', (msg) => {
-      this.cameras[msg.camera.id] = msg.camera;
-      this._renderCamList();
-      toast(`${msg.camera.name} bağlandı`);
-    });
-    this.signaling.on('camera-left', (msg) => {
-      if(this.cameras[msg.id]) this.cameras[msg.id].online = false;
-      this._renderCamList(); this._renderGrid();
-    });
-    this.signaling.on('offer', async (msg) => {
-      const pc = this.peers[msg.from];
-      if(!pc) return;
-      await pc.setRemoteDescription(new RTCSessionDescription(msg.payload));
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      this.signaling.send({type:'answer', target:msg.from, from:this.id, payload:answer});
-    });
-    this.signaling.on('ice', async (msg) => {
-      const pc = this.peers[msg.from];
-      if(pc && msg.payload){ try{ await pc.addIceCandidate(msg.payload); }catch(e){} }
-    });
-  },
-
-  _renderCamList(){
-    const list = document.getElementById('camList');
-    const ids = Object.keys(this.cameras);
-    document.getElementById('camCountLabel').textContent = ids.length
-      ? `${ids.filter(id=>this.cameras[id].online!==false).length} kamera çevrimiçi`
-      : 'Bağlı cihaz aranıyor…';
-    if(!ids.length){
-      list.innerHTML = `<div class="empty-hint">Henüz bağlı kamera yok. Telefondan "Telefon / Kamera" modunu seçip aynı ağdan bağlanın — oda kodu girmenize gerek yok.</div>`;
-      return;
-    }
-    list.innerHTML = '';
-    ids.forEach(id => {
-      const cam = this.cameras[id];
-      const item = document.createElement('div');
-      item.className = 'cam-item'; item.draggable = true;
-      item.ondragstart = (e) => e.dataTransfer.setData('text/cam-id', id);
-      item.innerHTML = `
-        <div class="cam-thumb">📷</div>
-        <div class="cam-info">
-          <div class="nm">${cam.name}</div>
-          <div class="meta"><span class="dot ${cam.online!==false?'on':''}"></span>${cam.online!==false?'Çevrimiçi':'Çevrimdışı'} · ${id.slice(0,6)}</div>
-        </div>`;
-      item.ondblclick = () => this._openRecordingsFor(id, cam.name);
-      list.appendChild(item);
-    });
-  },
-
-  async _ensurePeer(camId){
-    if(this.peers[camId]) return;
-    const pc = new RTCPeerConnection({iceServers: CONFIG.ICE_SERVERS});
-    this.peers[camId] = pc;
-    pc.onicecandidate = (e) => {
-      if(e.candidate) this.signaling.send({type:'ice', target:camId, from:this.id, payload:e.candidate});
-    };
-    pc.ontrack = (e) => {
-      this.streams[camId] = e.streams[0];
-      document.querySelectorAll('.block').forEach(el => {
-        const idx = el.dataset.idx;
-        if(this.blocks[idx] && this.blocks[idx].camId === camId){
-          const v = el.querySelector('video');
-          if(v) v.srcObject = e.streams[0];
-        }
-      });
-      if(this.autoRecord) this.toggleRecording(camId, true);
-    };
-    this.signaling.send({type:'viewer-request', target:camId, from:this.id});
-  },
-
-  toggleRecording(camId, force){
-    const active = !!this.recorders[camId];
-    const want = (force === undefined) ? !active : force;
-    if(want === active) return;
-    if(want){
-      const stream = this.streams[camId];
-      if(!stream){ toast('Görüntü henüz gelmedi'); return; }
-      const rec = new MediaRecorder(stream, {mimeType:'video/webm;codecs=vp8,opus'});
-      const chunks = [];
-      rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
-      rec.onstop = async () => {
-        const blob = new Blob(chunks, {type:'video/webm'});
-        const filename = `${Date.now()}.webm`;
-        await fetch(`${CONFIG.API_BASE}/api/upload/${camId}/${filename}`, {method:'PUT', body: blob});
-        toast('Kayıt R2\'ye kaydedildi');
-      };
-      rec.start();
-      this.recorders[camId] = rec;
-    } else {
-      this.recorders[camId].stop();
-      delete this.recorders[camId];
-    }
-    this._renderGrid();
-  },
-
-  toggleGlobalRecording(){
-    const anyOn = Object.keys(this.recorders).length > 0;
-    this.blocks.filter(b=>b.camId).forEach(b => this.toggleRecording(b.camId, !anyOn));
-    document.getElementById('globalRecBtn').classList.toggle('warn', !anyOn);
-    toast(anyOn ? 'Tüm kayıtlar durduruldu' : 'Tüm kameralarda kayıt başladı');
-  },
-
-  disconnectAll(){
-    Object.values(this.peers).forEach(pc => pc.close());
-    this.peers = {}; this.streams = {};
-    this._renderGrid();
-    toast('Bağlantılar kapatıldı');
-  },
-
-  async _openRecordingsFor(camId, camName){
-    document.getElementById('recModal').classList.add('show');
-    document.getElementById('recModalTitle').textContent = `Kayıtlar — ${camName}`;
-    const listEl = document.getElementById('recList');
-    listEl.innerHTML = '<div class="rec-empty">Yükleniyor…</div>';
-    document.getElementById('player').style.display = 'none';
-    try{
-      const res = await fetch(`${CONFIG.API_BASE}/api/recordings?camera=${camId}`);
-      const data = await res.json();
-      if(!data.recordings || !data.recordings.length){
-        listEl.innerHTML = '<div class="rec-empty">Bu kamera için kayıt bulunamadı.</div>';
-        return;
-      }
-      listEl.innerHTML = '';
-      data.recordings.forEach(r => {
-        const row = document.createElement('div'); row.className = 'rec-row';
-        row.innerHTML = `<span class="r-ico">🎞️</span>
-          <div class="r-info">${r.name}<div class="r-date">${new Date(r.uploaded).toLocaleString('tr-TR')}</div></div>`;
-        row.onclick = () => {
-          const player = document.getElementById('player');
-          player.src = `${CONFIG.API_BASE}/api/recording/${encodeURIComponent(r.key)}`;
-          player.style.display = 'block';
-          player.play();
-        };
-        listEl.appendChild(row);
-      });
-    }catch(e){
-      listEl.innerHTML = '<div class="rec-empty">Kayıtlar yüklenemedi.</div>';
-    }
-  }
-};
-
-function addCustomBlock(){ ViewerApp.addCustomBlockUI(); }
-function toggleGlobalRecording(){ ViewerApp.toggleGlobalRecording(); }
-function disconnectAll(){ ViewerApp.disconnectAll(); }
-function openRecordingsBrowser(){
-  document.getElementById('recModal').classList.add('show');
-  document.getElementById('recModalTitle').textContent = 'Tüm Kayıtlar';
-  const listEl = document.getElementById('recList');
-  listEl.innerHTML = '';
-  document.getElementById('player').style.display = 'none';
-  const ids = Object.keys(ViewerApp.cameras);
-  if(!ids.length){ listEl.innerHTML = '<div class="rec-empty">Önce bir kamera bağlanmalı.</div>'; return; }
-  ids.forEach(id => {
-    const row = document.createElement('div'); row.className = 'rec-row'; row.style.cursor = 'pointer';
-    row.innerHTML = `<span class="r-ico">📷</span><div class="r-info">${ViewerApp.cameras[id].name}<div class="r-date">Kayıtları görmek için tıklayın</div></div>`;
-    row.onclick = () => ViewerApp._openRecordingsFor(id, ViewerApp.cameras[id].name);
-    listEl.appendChild(row);
+    pc.createOffer().then(o=>pc.setLocalDescription(o)).catch(()=>finish(null));
+    setTimeout(()=>finish(null), timeoutMs || 4000);
   });
 }
-function closeRecordingsBrowser(){
-  document.getElementById('recModal').classList.remove('show');
-  const player = document.getElementById('player');
-  player.pause(); player.src = '';
+
+function safeParse(json){ try{ return JSON.parse(json); }catch(e){ return null; } }
+function fmtTime(ts){
+  const d = new Date(ts);
+  return d.toLocaleDateString("tr-TR") + " " + d.toLocaleTimeString("tr-TR", {hour:"2-digit", minute:"2-digit"});
 }
+function fmtDuration(sec){
+  sec = Math.round(sec);
+  const m = Math.floor(sec/60), s = sec%60;
+  return m + ":" + String(s).padStart(2,"0");
+}
+function toast(el, msg, ms){
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(el._t);
+  el._t = setTimeout(()=>el.classList.remove("show"), ms || 2200);
+}
+
+/* ============================================================
+   INDEXEDDB — YEREL KAYIT DEPOSU (bu bilgisayara özel)
+   ============================================================ */
+const RecStore = (function(){
+  let dbp = null;
+  function open(){
+    if(dbp) return dbp;
+    dbp = new Promise((resolve, reject)=>{
+      const req = indexedDB.open("gks-recordings", 1);
+      req.onupgradeneeded = ()=>{
+        const db = req.result;
+        const store = db.createObjectStore("clips", { keyPath:"id", autoIncrement:true });
+        store.createIndex("camId", "camId", { unique:false });
+      };
+      req.onsuccess = ()=>resolve(req.result);
+      req.onerror = ()=>reject(req.error);
+    });
+    return dbp;
+  }
+  async function save(camId, camName, startTime, duration, blob){
+    const db = await open();
+    return new Promise((resolve, reject)=>{
+      const tx = db.transaction("clips", "readwrite");
+      tx.objectStore("clips").add({ camId, camName, startTime, duration, blob });
+      tx.oncomplete = resolve;
+      tx.onerror = ()=>reject(tx.error);
+    });
+  }
+  async function listByCam(camId){
+    const db = await open();
+    return new Promise((resolve, reject)=>{
+      const tx = db.transaction("clips", "readonly");
+      const idx = tx.objectStore("clips").index("camId");
+      const req = idx.getAll(camId);
+      req.onsuccess = ()=>resolve(req.result.sort((a,b)=>b.startTime-a.startTime));
+      req.onerror = ()=>reject(req.error);
+    });
+  }
+  async function allCamIds(){
+    const db = await open();
+    return new Promise((resolve, reject)=>{
+      const tx = db.transaction("clips", "readonly");
+      const req = tx.objectStore("clips").getAll();
+      req.onsuccess = ()=>{
+        const map = new Map();
+        req.result.forEach(c=>{ if(!map.has(c.camId)) map.set(c.camId, c.camName); });
+        resolve(map);
+      };
+      req.onerror = ()=>reject(req.error);
+    });
+  }
+  return { save, listByCam, allCamIds };
+})();
+
+/* ============================================================
+   ORTAK DURUM
+   ============================================================ */
+const state = {
+  role: null,
+  netKey: null,
+  deviceId: null,
+  mqtt: null,
+  peer: null,
+};
+
+const el = (id)=>document.getElementById(id);
+
+/* ---- ağ anahtarı tespiti (ekran + rozet güncelleme) ---- */
+async function initNetworkKey(){
+  const ip = await detectPublicIP(4000);
+  const raw = ip ? ("net:" + ip) : "net:fallback-genel";
+  state.netKey = (await sha256Hex(raw)).slice(0, 10);
+  const ok = !!ip;
+  el("net-dot").className = "dot " + (ok ? "ok" : "warn");
+  el("net-text").textContent = ok
+    ? "Ağ hazır — aynı ağdaki cihazlar otomatik eşleşecek"
+    : "Ağ tespit edilemedi — genel eşleşme kanalı kullanılacak";
+  return state.netKey;
+}
+
+/* ============================================================
+   ROL SEÇİMİ
+   ============================================================ */
+function showScreen(name){
+  el("screen-role").classList.toggle("hidden", name !== "role");
+  el("screen-computer").classList.toggle("hidden", name !== "computer");
+  el("screen-phone").classList.toggle("hidden", name !== "phone");
+}
+
+el("pick-computer").addEventListener("click", ()=>{ state.role = "computer"; showScreen("computer"); startComputerMode(); });
+el("pick-camera").addEventListener("click", ()=>{ state.role = "camera"; showScreen("phone"); startCameraMode(); });
+el("btn-change-role").addEventListener("click", ()=>location.reload());
+el("btn-phone-back").addEventListener("click", ()=>location.reload());
+
+/* ============================================================================================
+   BİLGİSAYAR MODU
+   ============================================================================================ */
+function startComputerMode(){
+  const cams = new Map(); // camId -> {id,name,lastSeen,online,call,stream,recorder,recStart,capOverride}
+  const layouts = {
+    "1x1":{rows:1,cols:1}, "2x2":{rows:2,cols:2}, "2x3":{rows:2,cols:3},
+    "3x3":{rows:3,cols:3}, "4x4":{rows:4,cols:4}
+  };
+  let layout = layouts["2x2"];
+  let cells = new Array(layout.rows*layout.cols).fill(null); // camId per cell
+  let selectedCell = null;
+  let peer = null;
+  let mqttClient = null;
+  const nameOverrides = safeParse(localStorage.getItem("gks_name_overrides")) || {};
+
+  el("pc-net-dot").className = "dot warn";
+  el("pc-net-label").textContent = "Ağ algılanıyor…";
+
+  initNetworkKey().then((netKey)=>{
+    el("pc-net-dot").className = "dot ok";
+    el("pc-net-label").textContent = "Ağ · " + netKey;
+    connectSignaling(netKey);
+  });
+
+  function connectSignaling(netKey){
+    const myId = "pc-" + uuidv4().slice(0,8);
+    peer = new Peer("gks-" + netKey + "-" + myId, { debug: 0 });
+    peer.on("open", ()=>{});
+    peer.on("error", (e)=>{ console.warn("peer error", e); });
+
+    mqttClient = mqtt.connect(MQTT_URL, { clientId: "gksc-" + myId, clean:true, reconnectPeriod:3000 });
+    const presenceTopic = APP_ID + "/" + netKey + "/presence/+";
+    mqttClient.on("connect", ()=>{ mqttClient.subscribe(presenceTopic); });
+    mqttClient.on("message", (topic, payload)=>{
+      const msg = safeParse(payload.toString());
+      if(!msg) return;
+      if(topic.indexOf("/presence/") !== -1){
+        handlePresence(msg, netKey);
+      }
+    });
+
+    setInterval(()=>{
+      const now = Date.now();
+      let changed = false;
+      cams.forEach((c)=>{
+        const shouldBeOnline = (now - c.lastSeen) < OFFLINE_TIMEOUT_MS;
+        if(shouldBeOnline !== c.online){ c.online = shouldBeOnline; changed = true; if(!c.online) freezeCell(c.id); }
+      });
+      if(changed) renderSidebar();
+    }, 2000);
+
+    function handlePresence(msg, netKey){
+      if(!msg.id) return;
+      let c = cams.get(msg.id);
+      const isNew = !c;
+      if(!c){
+        c = { id: msg.id, name: nameOverrides[msg.id] || msg.name || ("Kamera " + msg.id.slice(0,4)), lastSeen: Date.now(), online:true, call:null, stream:null, mediaRecorder:null, recStart:0, peerId: "gks-" + netKey + "-cam-" + msg.id };
+        cams.set(msg.id, c);
+      }
+      c.lastSeen = Date.now();
+      c.online = true;
+      if(!nameOverrides[msg.id] && msg.name) c.name = msg.name;
+      if(isNew) renderSidebar(); else updateSidebarRow(c);
+    }
+
+    function callCamera(camId){
+      const c = cams.get(camId);
+      if(!c || c.call) return;
+      const call = peer.call(c.peerId, new MediaStream());
+      c.call = call;
+      call.on("stream", (remoteStream)=>{
+        c.stream = remoteStream;
+        placeStreamInCells(camId, remoteStream);
+      });
+      call.on("close", ()=>{ c.call = null; c.stream = null; });
+      call.on("error", (e)=>console.warn("call error", e));
+    }
+
+    function sendControl(camId, action, value){
+      const c = cams.get(camId);
+      if(!c) return;
+      mqttClient.publish(APP_ID + "/" + netKey + "/control/" + camId, JSON.stringify({ action, value, ts: Date.now() }));
+    }
+
+    /* expose to outer scope via closures below */
+    computerApi.callCamera = callCamera;
+    computerApi.sendControl = sendControl;
+    computerApi.cams = cams;
+    computerApi.netKey = netKey;
+  }
+
+  const computerApi = { callCamera:null, sendControl:null, cams:null, netKey:null };
+
+  /* ---------------- sidebar ---------------- */
+  function renderSidebar(){
+    const listEl = el("cam-list");
+    const arr = Array.from(cams.values());
+    el("cam-count").textContent = arr.filter(c=>c.online).length + " kamera";
+    if(arr.length === 0){
+      listEl.innerHTML = "";
+      listEl.appendChild(el("cam-list-empty"));
+      return;
+    }
+    listEl.innerHTML = "";
+    arr.sort((a,b)=>a.name.localeCompare(b.name)).forEach(c=>{
+      const row = document.createElement("div");
+      row.className = "cam-row";
+      row.draggable = true;
+      row.dataset.camId = c.id;
+      row.innerHTML =
+        '<div class="thumb"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg><span class="live-dot ' + (c.online?"on":"") + '"></span></div>' +
+        '<div class="meta"><div class="name">' + escapeHtml(c.name) + '</div><div class="sub ' + (c.online?"on":"") + '">' + (c.online ? "Çevrimiçi" : "Çevrimdışı") + '</div></div>';
+      row.addEventListener("click", ()=>{
+        if(selectedCell !== null){
+          assignCamToCell(selectedCell, c.id);
+          selectedCell = null;
+          renderGrid();
+        }
+      });
+      row.addEventListener("dblclick", ()=>{
+        const newName = prompt("Kamera adı:", c.name);
+        if(newName && newName.trim()){
+          c.name = newName.trim();
+          nameOverrides[c.id] = c.name;
+          localStorage.setItem("gks_name_overrides", JSON.stringify(nameOverrides));
+          renderSidebar(); renderGrid();
+        }
+      });
+      row.addEventListener("dragstart", (e)=>{ e.dataTransfer.setData("text/plain", c.id); });
+      listEl.appendChild(row);
+    });
+  }
+  function updateSidebarRow(){ renderSidebar(); }
+  function escapeHtml(s){ return s.replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m])); }
+
+  /* ---------------- grid / layout ---------------- */
+  el("layout-picker").addEventListener("click", (e)=>{
+    const btn = e.target.closest(".layout-btn");
+    if(!btn) return;
+    document.querySelectorAll(".layout-btn").forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
+    layout = layouts[btn.dataset.layout];
+    const newCells = new Array(layout.rows*layout.cols).fill(null);
+    cells.forEach((v,i)=>{ if(i < newCells.length) newCells[i] = v; });
+    cells = newCells;
+    selectedCell = null;
+    renderGrid();
+  });
+
+  function assignCamToCell(idx, camId){
+    cells[idx] = camId;
+    computerApi.callCamera && computerApi.callCamera(camId);
+  }
+
+  function freezeCell(camId){
+    document.querySelectorAll('.cell[data-cam-id="' + CSS.escape(camId) + '"] .cell-topbar').forEach(tb=>{});
+    renderGrid();
+  }
+
+  function placeStreamInCells(camId, stream){
+    document.querySelectorAll('.cell[data-cam-id="' + CSS.escape(camId) + '"] video').forEach(v=>{ v.srcObject = stream; });
+  }
+
+  function renderGrid(){
+    const grid = el("cam-grid");
+    grid.style.gridTemplateColumns = "repeat(" + layout.cols + ", 1fr)";
+    grid.style.gridTemplateRows = "repeat(" + layout.rows + ", 1fr)";
+    grid.innerHTML = "";
+    cells.forEach((camId, idx)=>{
+      const cell = document.createElement("div");
+      cell.className = "cell" + (selectedCell === idx ? " selected" : "");
+      if(camId){
+        const c = cams.get(camId);
+        cell.dataset.camId = camId;
+        const online = c && c.online;
+        cell.innerHTML =
+          '<video autoplay playsinline muted></video>' +
+          '<div class="cell-topbar">' +
+            '<span class="live-badge"' + (online?'':' style="display:none"') + '><span class="b"></span>CANLI</span>' +
+            '<span class="offline-badge"' + (online?' style="display:none"':'') + '>Bağlantı yok</span>' +
+            '<span class="name">' + escapeHtml(c ? c.name : "") + '</span>' +
+          '</div>' +
+          '<div class="cell-close" title="Kaldır"><svg class="icon-sm toast-white" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></div>' +
+          '<div class="cell-toolbar">' +
+            '<button class="cell-btn" data-act="switch" title="Ön/Arka kamera"><svg class="icon-sm toast-white" viewBox="0 0 24 24"><path d="M17 2l4 4-4 4"/><path d="M3 12v-2a4 4 0 014-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 12v2a4 4 0 01-4 4H3"/></svg></button>' +
+            '<button class="cell-btn" data-act="flash" title="Flaş"><svg class="icon-sm toast-white" viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg></button>' +
+            '<button class="cell-btn" data-act="zoom" title="Yakınlaştırma"><svg class="icon-sm toast-white" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35M8 11h6M11 8v6"/></svg></button>' +
+            '<div class="cell-spacer"></div>' +
+            '<button class="cell-btn rec" data-act="rec" title="Kaydet"><svg class="icon-sm toast-white" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg></button>' +
+          '</div>';
+        const v = cell.querySelector("video");
+        if(c && c.stream) v.srcObject = c.stream;
+        cell.addEventListener("click", (e)=>{
+          if(e.target.closest(".cell-toolbar") || e.target.closest(".cell-close")) return;
+        });
+        cell.querySelector(".cell-close").addEventListener("click", ()=>{
+          const cc = cams.get(camId);
+          if(cc && cc.call){ try{ cc.call.close(); }catch(err){} cc.call=null; cc.stream=null; }
+          cells[idx] = null;
+          renderGrid();
+        });
+        cell.querySelector('[data-act="switch"]').addEventListener("click", ()=>computerApi.sendControl(camId, "switchCamera"));
+        cell.querySelector('[data-act="flash"]').addEventListener("click", (ev)=>{
+          const btn = ev.currentTarget;
+          const on = !btn.classList.contains("active");
+          btn.classList.toggle("active", on);
+          computerApi.sendControl(camId, "flash", on);
+        });
+        cell.querySelector('[data-act="zoom"]').addEventListener("click", (ev)=>{
+          ev.stopPropagation();
+          openZoomPopover(cell, camId);
+        });
+        cell.querySelector('[data-act="rec"]').addEventListener("click", (ev)=>{
+          toggleRecording(camId, ev.currentTarget, c);
+        });
+      } else {
+        cell.innerHTML =
+          '<div class="cell-empty">' +
+            '<svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>' +
+            '<span>Kamera atamak için tıklayın</span>' +
+          '</div>';
+        cell.addEventListener("click", ()=>{
+          selectedCell = (selectedCell === idx) ? null : idx;
+          renderGrid();
+        });
+      }
+      cell.addEventListener("dragover", (e)=>e.preventDefault());
+      cell.addEventListener("drop", (e)=>{
+        e.preventDefault();
+        const camId2 = e.dataTransfer.getData("text/plain");
+        if(camId2){ assignCamToCell(idx, camId2); renderGrid(); }
+      });
+      grid.appendChild(cell);
+    });
+  }
+
+  function openZoomPopover(cell, camId){
+    document.querySelectorAll(".zoom-pop").forEach(p=>p.remove());
+    const pop = document.createElement("div");
+    pop.className = "zoom-pop";
+    pop.innerHTML =
+      '<label>Yakınlaştırma <span id="zoom-val">1.0x</span></label>' +
+      '<input type="range" min="1" max="5" step="0.1" value="1">';
+    cell.appendChild(pop);
+    const range = pop.querySelector("input");
+    range.addEventListener("input", ()=>{
+      pop.querySelector("#zoom-val").textContent = parseFloat(range.value).toFixed(1) + "x";
+      computerApi.sendControl(camId, "zoom", parseFloat(range.value));
+    });
+    setTimeout(()=>{
+      document.addEventListener("click", function onDoc(e){
+        if(!pop.contains(e.target)){ pop.remove(); document.removeEventListener("click", onDoc); }
+      });
+    }, 10);
+  }
+
+  function pickMime(){
+    const options = ["video/webm;codecs=vp9,opus","video/webm;codecs=vp8,opus","video/webm"];
+    for(const o of options){ if(MediaRecorder.isTypeSupported(o)) return o; }
+    return "";
+  }
+
+  function toggleRecording(camId, btn, c){
+    if(c.mediaRecorder && c.mediaRecorder.state === "recording"){
+      c.mediaRecorder.stop();
+      btn.classList.remove("active");
+      return;
+    }
+    if(!c.stream){ return; }
+    const mimeType = pickMime();
+    const recorder = new MediaRecorder(c.stream, mimeType ? { mimeType } : undefined);
+    const chunks = [];
+    const startTime = Date.now();
+    recorder.ondataavailable = (e)=>{ if(e.data && e.data.size > 0) chunks.push(e.data); };
+    recorder.onstop = async ()=>{
+      const blob = new Blob(chunks, { type: recorder.mimeType || "video/webm" });
+      const duration = (Date.now() - startTime) / 1000;
+      if(duration > 1){
+        await RecStore.save(camId, c.name, startTime, duration, blob);
+      }
+      c.mediaRecorder = null;
+      if(!el("view-rec").classList.contains("hidden")) renderRecCams();
+    };
+    recorder.start();
+    c.mediaRecorder = recorder;
+    btn.classList.add("active");
+  }
+
+  /* ---------------- tabs ---------------- */
+  document.querySelectorAll(".nav-tab").forEach(tab=>{
+    tab.addEventListener("click", ()=>{
+      document.querySelectorAll(".nav-tab").forEach(t=>t.classList.remove("active"));
+      tab.classList.add("active");
+      const isLive = tab.dataset.view === "live";
+      el("topbar-live").classList.toggle("hidden", !isLive);
+      el("view-live").classList.toggle("hidden", !isLive);
+      el("view-rec").classList.toggle("hidden", isLive);
+      if(!isLive) renderRecCams();
+    });
+  });
+
+  async function renderRecCams(){
+    const camMap = await RecStore.allCamIds();
+    cams.forEach((c,id)=>{ if(!camMap.has(id)) camMap.set(id, c.name); });
+    const container = el("rec-cams");
+    container.innerHTML = "";
+    if(camMap.size === 0){
+      container.innerHTML = '<div class="rec-empty">Henüz kayıt yok.</div>';
+      return;
+    }
+    camMap.forEach((name, id)=>{
+      const item = document.createElement("div");
+      item.className = "rec-cam-item";
+      item.textContent = name;
+      item.addEventListener("click", ()=>{
+        document.querySelectorAll(".rec-cam-item").forEach(i=>i.classList.remove("active"));
+        item.classList.add("active");
+        renderClipsFor(id, name);
+      });
+      container.appendChild(item);
+    });
+  }
+
+  async function renderClipsFor(camId, camName){
+    const clips = await RecStore.listByCam(camId);
+    const panel = el("rec-clips");
+    if(clips.length === 0){
+      panel.innerHTML = '<h2>' + escapeHtml(camName) + '</h2><div class="rec-empty">Bu kamera için kayıt bulunamadı.</div>';
+      return;
+    }
+    panel.innerHTML = '<h2>' + escapeHtml(camName) + " · " + clips.length + " kayıt</h2>";
+    clips.forEach(clip=>{
+      const card = document.createElement("div");
+      card.className = "clip-card";
+      card.innerHTML =
+        '<div class="thumb"><svg class="icon-sm" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M9 8l6 4-6 4V8z"/></svg></div>' +
+        '<div class="info"><b>' + fmtTime(clip.startTime) + '</b><span>Süre: ' + fmtDuration(clip.duration) + '</span></div>';
+      card.addEventListener("click", ()=>openClipModal(clip));
+      panel.appendChild(card);
+    });
+  }
+
+  function openClipModal(clip){
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    overlay.innerHTML =
+      '<div class="modal-box">' +
+        '<div class="modal-head"><b>' + escapeHtml(clip.camName) + " — " + fmtTime(clip.startTime) + '</b><div class="modal-close"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></div></div>' +
+        '<video controls autoplay></video>' +
+      '</div>';
+    const url = URL.createObjectURL(clip.blob);
+    overlay.querySelector("video").src = url;
+    overlay.querySelector(".modal-close").addEventListener("click", ()=>{ overlay.remove(); URL.revokeObjectURL(url); });
+    overlay.addEventListener("click", (e)=>{ if(e.target === overlay){ overlay.remove(); URL.revokeObjectURL(url); } });
+    document.body.appendChild(overlay);
+  }
+
+  renderGrid();
+  renderSidebar();
+}
+
+/* ============================================================================================
+   TELEFON / KAMERA MODU
+   ============================================================================================ */
+function startCameraMode(){
+  if(location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1"){
+    el("phone-https-warn").classList.remove("hidden");
+  }
+
+  let deviceId = localStorage.getItem("gks_device_id");
+  if(!deviceId){
+    deviceId = uuidv4();
+    localStorage.setItem("gks_device_id", deviceId);
+  }
+  const deviceName = localStorage.getItem("gks_device_name") || ("Kamera " + deviceId.slice(0,4));
+  localStorage.setItem("gks_device_name", deviceName);
+  el("phone-id-badge").textContent = "ID " + deviceId.slice(0,8);
+
+  let netKey = null, peer = null, mqttClient = null;
+  let stream = null, facingMode = "environment", flashOn = false, zoomVal = 1;
+  let viewers = 0;
+  const activeCalls = new Set();
+
+  el("phone-net-dot").className = "dot warn";
+  el("phone-net-label").textContent = "Bağlanıyor";
+
+  initNetworkKey().then((k)=>{
+    netKey = k;
+    setupSignaling();
+  });
+
+  function setupSignaling(){
+    peer = new Peer("gks-" + netKey + "-cam-" + deviceId, { debug: 0 });
+    peer.on("open", ()=>{
+      el("phone-net-dot").className = "dot ok";
+      el("phone-net-label").textContent = "Bağlı";
+    });
+    peer.on("error", (e)=>console.warn("peer error", e));
+    peer.on("call", (call)=>{
+      if(!stream){ call.close(); return; }
+      call.answer(stream);
+      activeCalls.add(call);
+      viewers = activeCalls.size;
+      updateViewers();
+      call.on("close", ()=>{ activeCalls.delete(call); viewers = activeCalls.size; updateViewers(); });
+    });
+
+    mqttClient = mqtt.connect(MQTT_URL, { clientId: "gksp-" + deviceId, clean:true, reconnectPeriod:3000 });
+    mqttClient.on("connect", ()=>{
+      mqttClient.subscribe(APP_ID + "/" + netKey + "/control/" + deviceId);
+      publishPresence();
+    });
+    mqttClient.on("message", (topic, payload)=>{
+      const msg = safeParse(payload.toString());
+      if(msg) applyControl(msg);
+    });
+    setInterval(publishPresence, HEARTBEAT_MS);
+  }
+
+  function publishPresence(){
+    if(!mqttClient || !mqttClient.connected) return;
+    mqttClient.publish(APP_ID + "/" + netKey + "/presence/" + deviceId, JSON.stringify({ id: deviceId, name: deviceName, ts: Date.now() }));
+  }
+
+  function updateViewers(){
+    el("phone-viewers").textContent = "· " + viewers + " izleyici";
+  }
+
+  function showToast(msg){ toast(el("phone-toast"), msg); }
+
+  async function applyControl(msg){
+    if(!stream) return;
+    const track = stream.getVideoTracks()[0];
+    if(!track) return;
+    if(msg.action === "flash"){
+      const caps = track.getCapabilities ? track.getCapabilities() : {};
+      if(caps.torch){
+        try{ await track.applyConstraints({ advanced:[{ torch: !!msg.value }] }); flashOn = !!msg.value; el("ctrl-flash").classList.toggle("active", flashOn); showToast("Bilgisayar flaşı " + (flashOn ? "açtı" : "kapattı")); }
+        catch(e){ showToast("Bu cihazda flaş desteklenmiyor"); }
+      } else {
+        showToast("Bu cihazda flaş desteklenmiyor");
+      }
+    } else if(msg.action === "zoom"){
+      const caps = track.getCapabilities ? track.getCapabilities() : {};
+      if(caps.zoom){
+        const val = Math.min(caps.zoom.max, Math.max(caps.zoom.min, msg.value));
+        try{ await track.applyConstraints({ advanced:[{ zoom: val }] }); zoomVal = val; showToast("Bilgisayar yakınlaştırmayı ayarladı: " + val.toFixed(1) + "x"); }
+        catch(e){ showToast("Yakınlaştırma uygulanamadı"); }
+      } else {
+        showToast("Bu cihazda yakınlaştırma desteklenmiyor");
+      }
+    } else if(msg.action === "switchCamera"){
+      facingMode = (facingMode === "environment") ? "user" : "environment";
+      showToast("Bilgisayar kamerayı değiştirdi");
+      await restartStream();
+    }
+  }
+
+  async function getStream(){
+    return navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: facingMode }, width:{ ideal:1280 }, height:{ ideal:720 } },
+      audio: false
+    });
+  }
+
+  async function restartStream(){
+    try{
+      const newStream = await getStream();
+      const newTrack = newStream.getVideoTracks()[0];
+      const oldTrack = stream ? stream.getVideoTracks()[0] : null;
+      if(oldTrack) oldTrack.stop();
+      stream = newStream;
+      el("phone-video").srcObject = stream;
+      activeCalls.forEach(call=>{
+        const sender = call.peerConnection && call.peerConnection.getSenders().find(s=>s.track && s.track.kind === "video");
+        if(sender) sender.replaceTrack(newTrack);
+      });
+    }catch(e){ showToast("Kamera değiştirilemedi"); console.warn(e); }
+  }
+
+  el("btn-broadcast").addEventListener("click", async ()=>{
+    if(stream){
+      stream.getTracks().forEach(t=>t.stop());
+      stream = null;
+      el("phone-video").srcObject = null;
+      el("phone-placeholder").classList.remove("hidden");
+      el("broadcast-label").textContent = "Yayını Başlat";
+      el("btn-broadcast").classList.remove("stop");
+      return;
+    }
+    try{
+      stream = await getStream();
+      el("phone-video").srcObject = stream;
+      el("phone-placeholder").classList.add("hidden");
+      el("broadcast-label").textContent = "Yayını Durdur";
+      el("btn-broadcast").classList.add("stop");
+    }catch(e){
+      showToast("Kamera izni verilmedi");
+      console.warn(e);
+    }
+  });
+
+  el("ctrl-switch").addEventListener("click", async ()=>{
+    if(!stream) return;
+    facingMode = (facingMode === "environment") ? "user" : "environment";
+    await restartStream();
+  });
+
+  el("ctrl-flash").addEventListener("click", async ()=>{
+    if(!stream) return;
+    const track = stream.getVideoTracks()[0];
+    const caps = track.getCapabilities ? track.getCapabilities() : {};
+    if(!caps.torch){ showToast("Bu cihazda flaş desteklenmiyor"); return; }
+    flashOn = !flashOn;
+    try{ await track.applyConstraints({ advanced:[{ torch: flashOn }] }); el("ctrl-flash").classList.toggle("active", flashOn); }
+    catch(e){ showToast("Flaş uygulanamadı"); }
+  });
+
+  function stepZoom(delta){
+    if(!stream) return;
+    const track = stream.getVideoTracks()[0];
+    const caps = track.getCapabilities ? track.getCapabilities() : {};
+    if(!caps.zoom){ showToast("Bu cihazda yakınlaştırma desteklenmiyor"); return; }
+    zoomVal = Math.min(caps.zoom.max, Math.max(caps.zoom.min, zoomVal + delta));
+    track.applyConstraints({ advanced:[{ zoom: zoomVal }] }).catch(()=>{});
+  }
+  el("ctrl-zoom-in").addEventListener("click", ()=>stepZoom(0.3));
+  el("ctrl-zoom-out").addEventListener("click", ()=>stepZoom(-0.3));
+}
+
+})();
 </script>
 </body>
 </html>
