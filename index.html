@@ -29,7 +29,7 @@
     font-family:"Segoe UI Variable","Segoe UI",-apple-system,"Inter",system-ui,sans-serif;
   }
   *{box-sizing:border-box;}
-  html,body{height:100%;}
+  html,body{height:100%;height:100dvh;}
   body{
     margin:0;
     background:
@@ -51,7 +51,7 @@
   .icon-lg{width:26px;height:26px;}
 
   /* ---------- App shell ---------- */
-  #app{height:100vh;width:100vw;position:relative;}
+  #app{height:100vh;height:100dvh;width:100vw;position:relative;overflow:hidden;}
   .hidden{display:none !important;}
 
   /* ---------- Role select screen ---------- */
@@ -233,6 +233,49 @@
   .rec-cams{width:220px;border-right:1px solid var(--border-soft);overflow-y:auto;padding:12px;flex-shrink:0;}
   .rec-cam-item{padding:9px 10px;border-radius:var(--radius-sm);font-size:12.5px;color:var(--text-dim);cursor:pointer;margin-bottom:3px;}
   .rec-cam-item:hover{background:var(--panel);}
+
+  /* ---------- Touch devices: no hover, so show controls directly ---------- */
+  @media (hover: none){
+    .cell-toolbar{opacity:1;}
+    .cell-close{opacity:1;}
+  }
+
+  /* ---------- Mobile: computer mode becomes a collapsible drawer layout ---------- */
+  .menu-btn{
+    display:none;width:32px;height:32px;border-radius:8px;background:var(--panel);border:1px solid var(--border);
+    color:var(--text-dim);align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;
+  }
+  .sidebar-backdrop{display:none;}
+  .mobile-topbar{
+    display:none;align-items:center;gap:10px;padding:10px 12px;flex-shrink:0;
+    border-bottom:1px solid var(--border-soft);background:var(--bg-1);
+  }
+  .mobile-topbar b{font-size:13.5px;font-weight:600;}
+  @media (max-width: 860px){
+    .mobile-topbar{display:flex;}
+    .menu-btn{display:flex;}
+    .pc-shell{position:relative;overflow:hidden;}
+    .sidebar{
+      position:fixed;top:0;bottom:0;left:0;z-index:60;width:84vw;max-width:300px;
+      transform:translateX(-100%);transition:transform .2s ease;box-shadow:0 0 40px rgba(0,0,0,.6);
+    }
+    .sidebar.open{transform:translateX(0);}
+    .sidebar-backdrop{
+      display:block;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:55;
+      opacity:0;pointer-events:none;transition:opacity .2s ease;
+    }
+    .sidebar-backdrop.show{opacity:1;pointer-events:auto;}
+    .topbar{padding:0 10px;gap:8px;}
+    .topbar-title{font-size:12.5px;gap:6px;}
+    .topbar-title .cnt{display:none;}
+    .layout-picker{transform:scale(.9);transform-origin:right center;}
+    .grid-area{padding:8px;}
+    .cam-grid{gap:6px;min-height:0;}
+    .cell{min-height:110px;}
+    .rec-cams{width:130px;padding:8px;}
+    .rec-clips{padding:12px 14px;}
+    .modal-box{padding:10px;}
+  }
   .rec-cam-item.active{background:var(--panel-2);color:var(--text);border:1px solid var(--border);}
   .rec-clips{flex:1;overflow-y:auto;padding:18px 22px;}
   .rec-clips h2{font-size:14px;margin:0 0 14px;font-weight:600;}
@@ -244,6 +287,19 @@
   .clip-card .thumb{width:64px;height:44px;border-radius:6px;background:var(--panel-3);display:flex;align-items:center;justify-content:center;color:var(--text-faint);flex-shrink:0;}
   .clip-card .info b{font-size:12.8px;font-weight:500;display:block;}
   .clip-card .info span{font-size:11.5px;color:var(--text-faint);}
+  .rec-clips-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
+  .rec-clips-head h2{margin:0;}
+  .rec-delete-all{
+    display:flex;align-items:center;gap:6px;background:transparent;border:1px solid var(--border);color:var(--live);
+    font-size:11.5px;padding:6px 10px;border-radius:var(--radius-sm);cursor:pointer;flex-shrink:0;
+  }
+  .rec-delete-all:hover{background:rgba(229,72,77,.1);border-color:var(--live);}
+  .clip-spacer{flex:1;}
+  .clip-delete{
+    width:30px;height:30px;border-radius:6px;background:transparent;border:1px solid transparent;color:var(--text-faint);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;
+  }
+  .clip-delete:hover{background:rgba(229,72,77,.12);border-color:var(--live);color:var(--live);}
   .rec-empty{color:var(--text-faint);font-size:12.5px;padding:40px 0;text-align:center;}
 
   .modal-overlay{
@@ -357,7 +413,8 @@
 
   <!-- ====================== COMPUTER MODE ====================== -->
   <div id="screen-computer" class="pc-shell hidden">
-    <div class="sidebar">
+    <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+    <div class="sidebar" id="sidebar">
       <div class="sidebar-head">
         <div class="brand-row">
           <div class="mark"><svg class="icon" viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5 3.4 8.7 8 10 4.6-1.3 8-5 8-10V5l-8-3Z"/></svg></div>
@@ -390,6 +447,12 @@
     </div>
 
     <div class="pc-main">
+      <div class="mobile-topbar" id="mobile-topbar">
+        <button class="menu-btn" id="btn-open-sidebar" title="Kameralar">
+          <svg class="icon-sm" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+        </button>
+        <b id="mobile-topbar-title">Canlı İzleme</b>
+      </div>
       <div class="topbar" id="topbar-live">
         <div class="topbar-title">Canlı İzleme <span class="cnt" id="cam-count">0 kamera</span></div>
         <div class="layout-picker" id="layout-picker">
@@ -601,7 +664,30 @@ const RecStore = (function(){
       req.onerror = ()=>reject(req.error);
     });
   }
-  return { save, listByCam, allCamIds };
+  async function deleteClip(id){
+    const db = await open();
+    return new Promise((resolve, reject)=>{
+      const tx = db.transaction("clips", "readwrite");
+      tx.objectStore("clips").delete(id);
+      tx.oncomplete = resolve;
+      tx.onerror = ()=>reject(tx.error);
+    });
+  }
+  async function deleteAllForCam(camId){
+    const db = await open();
+    return new Promise((resolve, reject)=>{
+      const tx = db.transaction("clips", "readwrite");
+      const idx = tx.objectStore("clips").index("camId");
+      const req = idx.openCursor(IDBKeyRange.only(camId));
+      req.onsuccess = ()=>{
+        const cursor = req.result;
+        if(cursor){ cursor.delete(); cursor.continue(); }
+      };
+      tx.oncomplete = resolve;
+      tx.onerror = ()=>reject(tx.error);
+    });
+  }
+  return { save, listByCam, allCamIds, deleteClip, deleteAllForCam };
 })();
 
 /* ============================================================
@@ -784,6 +870,7 @@ function startComputerMode(){
           assignCamToCell(selectedCell, c.id);
           selectedCell = null;
           renderGrid();
+          closeSidebarDrawer();
         }
       });
       function renameCam(){
@@ -936,6 +1023,7 @@ function startComputerMode(){
         cell.addEventListener("click", ()=>{
           selectedCell = (selectedCell === idx) ? null : idx;
           renderGrid();
+          if(selectedCell !== null && window.innerWidth <= 860) openSidebarDrawer();
         });
       }
       cell.addEventListener("dragover", (e)=>e.preventDefault());
@@ -1084,9 +1172,23 @@ function startComputerMode(){
       el("topbar-live").classList.toggle("hidden", !isLive);
       el("view-live").classList.toggle("hidden", !isLive);
       el("view-rec").classList.toggle("hidden", isLive);
+      el("mobile-topbar-title").textContent = isLive ? "Canlı İzleme" : "Kayıtlar";
       if(!isLive) renderRecCams();
+      closeSidebarDrawer();
     });
   });
+
+  /* ---------------- mobil çekmece (sidebar) ---------------- */
+  function openSidebarDrawer(){
+    el("sidebar").classList.add("open");
+    el("sidebar-backdrop").classList.add("show");
+  }
+  function closeSidebarDrawer(){
+    el("sidebar").classList.remove("open");
+    el("sidebar-backdrop").classList.remove("show");
+  }
+  el("btn-open-sidebar").addEventListener("click", openSidebarDrawer);
+  el("sidebar-backdrop").addEventListener("click", closeSidebarDrawer);
 
   async function renderRecCams(){
     const camMap = await RecStore.allCamIds();
@@ -1117,15 +1219,36 @@ function startComputerMode(){
       panel.innerHTML = '<h2>' + escapeHtml(camName) + '</h2><div class="rec-empty">Bu kamera için kayıt bulunamadı.</div>';
       return;
     }
-    panel.innerHTML = '<h2>' + escapeHtml(camName) + " · " + clips.length + " kayıt</h2>";
+    panel.innerHTML =
+      '<div class="rec-clips-head"><h2>' + escapeHtml(camName) + " · " + clips.length + ' kayıt</h2>' +
+      '<button class="rec-delete-all" title="Bu kameranın tüm kayıtlarını sil"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>Tümünü sil</button></div>';
+    const list = document.createElement("div");
     clips.forEach(clip=>{
       const card = document.createElement("div");
       card.className = "clip-card";
       card.innerHTML =
         '<div class="thumb"><svg class="icon-sm" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M9 8l6 4-6 4V8z"/></svg></div>' +
-        '<div class="info"><b>' + fmtTime(clip.startTime) + '</b><span>Süre: ' + fmtDuration(clip.duration) + '</span></div>';
-      card.addEventListener("click", ()=>openClipModal(clip));
-      panel.appendChild(card);
+        '<div class="info"><b>' + fmtTime(clip.startTime) + '</b><span>Süre: ' + fmtDuration(clip.duration) + '</span></div>' +
+        '<div class="clip-spacer"></div>' +
+        '<button class="clip-delete" title="Bu kaydı sil"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg></button>';
+      card.addEventListener("click", (e)=>{
+        if(e.target.closest(".clip-delete")) return;
+        openClipModal(clip);
+      });
+      card.querySelector(".clip-delete").addEventListener("click", async (e)=>{
+        e.stopPropagation();
+        if(!confirm("Bu kaydı silmek istediğinize emin misiniz?")) return;
+        await RecStore.deleteClip(clip.id);
+        renderClipsFor(camId, camName);
+      });
+      list.appendChild(card);
+    });
+    panel.appendChild(list);
+    panel.querySelector(".rec-delete-all").addEventListener("click", async ()=>{
+      if(!confirm("Bu kameraya ait TÜM kayıtları silmek istediğinize emin misiniz? Bu işlem geri alınamaz.")) return;
+      await RecStore.deleteAllForCam(camId);
+      renderClipsFor(camId, camName);
+      renderRecCams();
     });
   }
 
@@ -1134,12 +1257,25 @@ function startComputerMode(){
     overlay.className = "modal-overlay";
     overlay.innerHTML =
       '<div class="modal-box">' +
-        '<div class="modal-head"><b>' + escapeHtml(clip.camName) + " — " + fmtTime(clip.startTime) + '</b><div class="modal-close"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></div></div>' +
+        '<div class="modal-head"><b>' + escapeHtml(clip.camName) + " — " + fmtTime(clip.startTime) + '</b>' +
+          '<div style="display:flex;gap:8px;">' +
+            '<div class="modal-close" id="modal-delete" title="Kaydı sil"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg></div>' +
+            '<div class="modal-close"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></div>' +
+          '</div>' +
+        '</div>' +
         '<video controls autoplay></video>' +
       '</div>';
     const url = URL.createObjectURL(clip.blob);
     overlay.querySelector("video").src = url;
-    overlay.querySelector(".modal-close").addEventListener("click", ()=>{ overlay.remove(); URL.revokeObjectURL(url); });
+    overlay.querySelectorAll(".modal-close")[1].addEventListener("click", ()=>{ overlay.remove(); URL.revokeObjectURL(url); });
+    overlay.querySelector("#modal-delete").addEventListener("click", async ()=>{
+      if(!confirm("Bu kaydı silmek istediğinize emin misiniz?")) return;
+      await RecStore.deleteClip(clip.id);
+      overlay.remove();
+      URL.revokeObjectURL(url);
+      renderClipsFor(clip.camId, clip.camName);
+      renderRecCams();
+    });
     overlay.addEventListener("click", (e)=>{ if(e.target === overlay){ overlay.remove(); URL.revokeObjectURL(url); } });
     document.body.appendChild(overlay);
   }
@@ -1161,19 +1297,18 @@ function startCameraMode(){
     deviceId = uuidv4();
     localStorage.setItem("gks_device_id", deviceId);
   }
-  // Varsayılan isim olarak cihazın modeli kullanılır (ör. "iPhone 14", "SM-G991B").
-  // Bilgisayar tarafında bir kameraya çift tıklanarak veya kalem simgesiyle bu isim
-  // istenildiği zaman elle değiştirilebilir; o zaman bu varsayılan bir daha geçerli olmaz.
+  // Varsayılan isim olarak cihazın modeli kullanılır (ör. "Pixel 6", "SM-G991B").
+  // iOS cihazlarda tarayıcı güvenliği nedeniyle model numarası alınamaz, bu yüzden
+  // sadece "iPhone" / "iPad" gösterilir. Bilgisayar tarafında bir kameraya çift tıklanarak
+  // veya kalem simgesiyle bu isim istenildiği zaman elle değiştirilebilir.
   let deviceName = localStorage.getItem("gks_device_name") || ("Kamera " + deviceId.slice(0,4));
-  if(!localStorage.getItem("gks_device_name")){
-    detectDeviceModel().then(model=>{
-      if(model){
-        deviceName = model;
-        localStorage.setItem("gks_device_name", deviceName);
-        publishPresence();
-      }
-    });
-  }
+  detectDeviceModel().then(model=>{
+    if(model && model !== deviceName){
+      deviceName = model;
+      localStorage.setItem("gks_device_name", deviceName);
+      publishPresence();
+    }
+  });
   el("phone-id-badge").textContent = "ID " + deviceId.slice(0,8);
 
   let netKey = null, peer = null, mqttClient = null;
