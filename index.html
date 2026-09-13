@@ -1,0 +1,1051 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>VonCam</title>
+<style>
+  :root{
+    --bg:#0d0d0f;
+    --bg-soft: radial-gradient(1200px 700px at 20% -10%, #1c1a22 0%, #0d0d0f 55%);
+    --panel: rgba(255,255,255,0.045);
+    --panel-strong: rgba(28,28,32,0.82);
+    --border: rgba(255,255,255,0.09);
+    --border-strong: rgba(255,255,255,0.16);
+    --text: #f1efec;
+    --text-dim: #a6a4a1;
+    --text-faint: #6e6c6a;
+    --accent: #c96a4d;
+    --accent-hover:#d97a5c;
+    --accent-soft: rgba(201,106,77,0.16);
+    --success:#57b17c;
+    --danger:#e0555c;
+    --radius-sm:6px;
+    --radius-md:10px;
+    --radius-lg:16px;
+    --font: "Segoe UI Variable","Segoe UI","Segoe UI Emoji",system-ui,-apple-system,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--bg-soft); background-color:var(--bg);
+    color:var(--text); font-family:var(--font); font-size:15px;
+    -webkit-font-smoothing:antialiased; overflow:hidden;
+  }
+  button{font-family:inherit;}
+  ::selection{background:var(--accent-soft);}
+  input,select{
+    font-family:inherit; background:rgba(255,255,255,0.05); border:1px solid var(--border);
+    color:var(--text); border-radius:var(--radius-sm); padding:10px 12px; font-size:14px; outline:none;
+  }
+  input:focus,select:focus{border-color:var(--border-strong);}
+  .screen{position:fixed; inset:0; display:none; flex-direction:column;}
+  .screen.active{display:flex;}
+  .scroll{overflow-y:auto;}
+
+  /* ---------- shared bits ---------- */
+  .center-wrap{flex:1; display:flex; align-items:center; justify-content:center; padding:24px;}
+  .card{
+    background:var(--panel-strong); backdrop-filter:blur(24px) saturate(140%);
+    border:1px solid var(--border); border-radius:var(--radius-lg);
+    box-shadow:0 20px 60px rgba(0,0,0,0.45);
+    padding:28px; width:100%; max-width:420px;
+  }
+  .card h1{font-size:19px; margin:0 0 4px; font-weight:600; letter-spacing:.2px;}
+  .card p.sub{color:var(--text-dim); font-size:13.5px; margin:0 0 20px; line-height:1.5;}
+  .field{margin-bottom:14px;}
+  .field label{display:block; font-size:12.5px; color:var(--text-dim); margin-bottom:6px;}
+  .field input{width:100%;}
+  .row{display:flex; gap:8px;}
+  .row > *{flex:1;}
+  .btn{
+    border:1px solid var(--border-strong); background:rgba(255,255,255,0.06); color:var(--text);
+    padding:10px 16px; border-radius:var(--radius-sm); cursor:pointer; font-size:14px; font-weight:500;
+    transition:background .15s, transform .05s; display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  }
+  .btn:hover{background:rgba(255,255,255,0.11);}
+  .btn:active{transform:scale(0.98);}
+  .btn.primary{background:var(--accent); border-color:var(--accent); color:#fff;}
+  .btn.primary:hover{background:var(--accent-hover);}
+  .btn.danger{background:var(--danger); border-color:var(--danger); color:#fff;}
+  .btn.ghost{background:transparent; border-color:transparent; color:var(--text-dim);}
+  .btn.ghost:hover{color:var(--text); background:rgba(255,255,255,0.06);}
+  .btn:disabled{opacity:.5; cursor:default;}
+  .btn.block{width:100%;}
+  .hint{font-size:12px; color:var(--text-faint); margin-top:10px; line-height:1.5;}
+  .hint b{color:var(--text-dim);}
+  .error-box{background:rgba(224,85,92,0.12); border:1px solid rgba(224,85,92,0.35); color:#f3a2a6; font-size:13px; padding:10px 12px; border-radius:var(--radius-sm); margin-bottom:14px; display:none;}
+  .toggle-info{background:transparent; border:none; color:var(--accent); font-size:12.5px; cursor:pointer; padding:0; margin-top:4px;}
+  .info-panel{font-size:12.5px; color:var(--text-dim); background:rgba(255,255,255,0.04); border:1px solid var(--border); padding:12px 14px; border-radius:var(--radius-sm); margin-top:10px; line-height:1.6; display:none;}
+  .info-panel.open{display:block;}
+  .info-panel ol{margin:6px 0 0; padding-left:18px;}
+
+  /* role cards */
+  .role-grid{display:flex; gap:14px; width:100%; max-width:560px;}
+  .role-card{
+    flex:1; background:var(--panel-strong); border:1px solid var(--border); border-radius:var(--radius-lg);
+    padding:32px 20px; text-align:center; cursor:pointer; transition:border-color .15s, transform .1s;
+  }
+  .role-card:hover{border-color:var(--border-strong); transform:translateY(-2px);}
+  .role-card .icon{font-size:38px; margin-bottom:14px;}
+  .role-card h3{margin:0 0 6px; font-size:16px;}
+  .role-card p{margin:0; font-size:12.5px; color:var(--text-dim); line-height:1.5;}
+
+  .topbar{
+    height:52px; flex:none; display:flex; align-items:center; justify-content:space-between;
+    padding:0 16px; background:rgba(20,20,23,0.75); backdrop-filter:blur(18px);
+    border-bottom:1px solid var(--border); -webkit-app-region:drag;
+  }
+  .topbar .left{display:flex; align-items:center; gap:10px; font-weight:600; font-size:14px;}
+  .dot{width:8px; height:8px; border-radius:50%; background:var(--text-faint); flex:none;}
+  .dot.on{background:var(--success); box-shadow:0 0 8px rgba(87,177,124,0.7);}
+  .dot.off{background:var(--danger); box-shadow:0 0 8px rgba(224,85,92,0.6);}
+  .chip{font-size:11px; color:var(--text-dim); background:rgba(255,255,255,0.06); border:1px solid var(--border); padding:3px 9px; border-radius:999px;}
+
+  /* ---------- CAMERA SCREEN ---------- */
+  #screen-camera{background:#000;}
+  .cam-video-wrap{flex:1; position:relative; overflow:hidden; background:#000;}
+  #camVideo{width:100%; height:100%; object-fit:cover;}
+  .cam-topbar{position:absolute; top:0; left:0; right:0; padding:14px 16px; display:flex; justify-content:space-between; align-items:flex-start;
+    background:linear-gradient(to bottom, rgba(0,0,0,0.55), transparent); z-index:5;}
+  .cam-id-badge{font-size:11px; color:#e9e7e4; background:rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.15); padding:4px 10px; border-radius:999px; backdrop-filter:blur(6px);}
+  .cam-toast{position:absolute; top:64px; left:50%; transform:translateX(-50%); background:rgba(20,20,23,0.9); border:1px solid var(--border-strong);
+    padding:8px 16px; border-radius:999px; font-size:13px; z-index:9; opacity:0; transition:opacity .25s; pointer-events:none;}
+  .cam-toast.show{opacity:1;}
+  .rec-timer{position:absolute; top:14px; left:50%; transform:translateX(-50%); background:var(--danger); color:#fff; font-size:12.5px; font-weight:600;
+    padding:5px 12px; border-radius:999px; display:none; align-items:center; gap:6px; z-index:6;}
+  .rec-timer.show{display:flex;}
+  .rec-timer .blink{width:7px;height:7px;border-radius:50%;background:#fff; animation:blink 1s infinite;}
+  @keyframes blink{50%{opacity:.25;}}
+
+  .cam-toolbar{
+    position:absolute; bottom:22px; left:50%; transform:translateX(-50%); z-index:5;
+    background:rgba(20,20,23,0.72); backdrop-filter:blur(20px) saturate(150%);
+    border:1px solid var(--border-strong); border-radius:999px;
+    display:flex; align-items:center; gap:6px; padding:8px; max-width:94vw;
+  }
+  .icon-btn{
+    width:46px; height:46px; border-radius:50%; border:1px solid transparent; background:rgba(255,255,255,0.07); color:var(--text);
+    display:flex; align-items:center; justify-content:center; font-size:19px; cursor:pointer; flex:none;
+  }
+  .icon-btn:hover{background:rgba(255,255,255,0.14);}
+  .icon-btn.active{background:var(--accent); }
+  .icon-btn.rec{width:58px; height:58px; background:var(--danger); font-size:0; position:relative;}
+  .icon-btn.rec::after{content:""; width:20px; height:20px; border-radius:6px; background:#fff;}
+  .icon-btn.rec.recording::after{border-radius:4px; width:18px;height:18px;}
+  .zoom-pop{position:absolute; bottom:96px; left:50%; transform:translateX(-50%); background:rgba(20,20,23,0.85); border:1px solid var(--border-strong);
+    border-radius:999px; padding:10px 18px; display:none; align-items:center; gap:10px; backdrop-filter:blur(16px);}
+  .zoom-pop.show{display:flex;}
+  .zoom-pop input[type=range]{width:140px;}
+  .gear-btn{position:absolute; top:14px; right:16px; z-index:6;}
+  .settings-sheet{
+    position:absolute; inset:0; background:rgba(10,10,11,0.6); backdrop-filter:blur(4px); z-index:20;
+    display:none; align-items:flex-end; justify-content:center;
+  }
+  .settings-sheet.open{display:flex;}
+  .sheet-body{
+    width:100%; max-width:480px; background:var(--panel-strong); border:1px solid var(--border-strong);
+    border-radius:20px 20px 0 0; padding:20px 20px 26px; max-height:80vh; overflow-y:auto;
+  }
+  .sheet-body h2{margin:0 0 16px; font-size:16px;}
+  .set-row{display:flex; align-items:center; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--border);}
+  .set-row:last-child{border-bottom:none;}
+  .set-row .lbl{font-size:13.5px;}
+  .set-row .sub{font-size:11.5px; color:var(--text-faint); margin-top:2px;}
+  .switch{width:42px; height:24px; border-radius:999px; background:rgba(255,255,255,0.15); position:relative; cursor:pointer; flex:none;}
+  .switch.on{background:var(--accent);}
+  .switch::after{content:""; width:18px; height:18px; border-radius:50%; background:#fff; position:absolute; top:3px; left:3px; transition:left .15s;}
+  .switch.on::after{left:21px;}
+  .seg{display:flex; background:rgba(255,255,255,0.05); border:1px solid var(--border); border-radius:999px; padding:3px; gap:2px;}
+  .seg button{flex:1; border:none; background:transparent; color:var(--text-dim); padding:7px 10px; border-radius:999px; font-size:12.5px; cursor:pointer;}
+  .seg button.active{background:var(--accent); color:#fff;}
+
+  /* ---------- VIEWER SCREEN ---------- */
+  #screen-viewer{background:var(--bg-soft); background-color:var(--bg);}
+  .viewer-body{flex:1; display:flex; overflow:hidden;}
+  .sidebar{width:280px; flex:none; border-right:1px solid var(--border); display:flex; flex-direction:column; background:rgba(255,255,255,0.02);}
+  .sidebar-head{padding:14px 16px 8px; font-size:12px; color:var(--text-faint); text-transform:uppercase; letter-spacing:.06em; display:flex; justify-content:space-between; align-items:center;}
+  .cam-list{flex:1; overflow-y:auto; padding:4px 10px 10px;}
+  .cam-item{
+    display:flex; gap:10px; align-items:center; padding:10px; border-radius:var(--radius-md); cursor:pointer; margin-bottom:6px;
+    border:1px solid transparent;
+  }
+  .cam-item:hover{background:rgba(255,255,255,0.05);}
+  .cam-item.sel{background:var(--accent-soft); border-color:rgba(201,106,77,0.4);}
+  .cam-thumb{width:44px; height:44px; border-radius:8px; background:#1c1c1f; flex:none; overflow:hidden; display:flex; align-items:center; justify-content:center; font-size:18px; color:var(--text-faint);}
+  .cam-thumb img{width:100%; height:100%; object-fit:cover;}
+  .cam-meta{flex:1; min-width:0;}
+  .cam-meta .nm{font-size:13.5px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .cam-meta .sub{font-size:11px; color:var(--text-faint);}
+  .empty-state{padding:30px 16px; text-align:center; color:var(--text-faint); font-size:12.5px; line-height:1.6;}
+
+  .main-area{flex:1; display:flex; flex-direction:column; overflow:hidden;}
+  .main-toolbar{padding:14px 20px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border); gap:12px; flex-wrap:wrap;}
+  .main-content{flex:1; overflow-y:auto; padding:20px;}
+
+  .grid-cams{display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:14px;}
+  .cam-card{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius-md); overflow:hidden;}
+  .cam-card .cam-preview{aspect-ratio:16/10; background:#141416; display:flex; align-items:center; justify-content:center; color:var(--text-faint); font-size:24px; position:relative;}
+  .cam-card .cam-preview img{width:100%; height:100%; object-fit:cover;}
+  .cam-card .cam-body{padding:12px 14px;}
+  .cam-card .cam-title{display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:600; margin-bottom:2px;}
+  .cam-card .cam-sub{font-size:11.5px; color:var(--text-faint); margin-bottom:10px;}
+  .cam-controls{display:flex; gap:6px; flex-wrap:wrap;}
+  .cam-controls .icon-btn{width:34px; height:34px; font-size:14px;}
+
+  .rec-table{width:100%; border-collapse:collapse; font-size:13px;}
+  .rec-table th{text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-faint); padding:8px 10px; border-bottom:1px solid var(--border);}
+  .rec-table td{padding:10px; border-bottom:1px solid var(--border); vertical-align:middle;}
+  .rec-table tr:hover td{background:rgba(255,255,255,0.02);}
+  .video-modal{position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:50; display:none; align-items:center; justify-content:center; padding:24px;}
+  .video-modal.open{display:flex;}
+  .video-modal .box{background:#000; border-radius:var(--radius-md); overflow:hidden; max-width:90vw; max-height:85vh; border:1px solid var(--border-strong); position:relative;}
+  .video-modal video{max-width:90vw; max-height:80vh; display:block;}
+  .video-modal .close{position:absolute; top:8px; right:8px; z-index:2;}
+
+  .note-banner{font-size:12px; color:var(--text-faint); background:rgba(255,255,255,0.03); border:1px solid var(--border); padding:10px 14px; border-radius:var(--radius-sm); margin-bottom:16px; line-height:1.6;}
+
+  ::-webkit-scrollbar{width:10px; height:10px;}
+  ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.12); border-radius:6px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+
+  @media (max-width:720px){
+    .sidebar{width:100%; position:absolute; inset:0; z-index:15; background:var(--bg);}
+    .sidebar.hidden-mobile{display:none;}
+    .viewer-body{position:relative;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ SETUP SCREEN ============ -->
+<div class="screen active" id="screen-setup">
+  <div class="center-wrap">
+    <div class="card">
+      <h1>VonCam Kurulumu</h1>
+      <p class="sub">Sistem, Telegram botunuz üzerinden çalışır. Oda kodu yok — bot token'ı ve sohbet ID'si tek seferlik kurulumdur.</p>
+      <div class="error-box" id="setupError"></div>
+      <div class="field">
+        <label>Bot Token</label>
+        <input type="text" id="inpToken" placeholder="123456789:AAExxxxxxxxxxxxxxxxxxxxxxxxxxx" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>Chat ID</label>
+        <div class="row">
+          <input type="text" id="inpChatId" placeholder="örn. 5849302xxx" autocomplete="off">
+          <button class="btn" id="btnFindChat" style="flex:0 0 auto;">Bul</button>
+        </div>
+      </div>
+      <button class="btn primary block" id="btnSetupContinue">Devam Et</button>
+      <button class="toggle-info" id="btnToggleInfo">Bot token ve chat ID nasıl alınır?</button>
+      <div class="info-panel" id="infoPanel">
+        <ol>
+          <li>Telegram'da <b>@BotFather</b> ile sohbet açın, <b>/newbot</b> yazın ve adımları izleyin.</li>
+          <li>Size verilen token'ı yukarı yapıştırın.</li>
+          <li>Oluşturduğunuz bota Telegram'dan herhangi bir mesaj gönderin (örn. "merhaba").</li>
+          <li>Yukarıdaki <b>Bul</b> butonuna basın — chat ID otomatik doldurulur.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ ROLE SCREEN ============ -->
+<div class="screen" id="screen-role">
+  <div class="topbar">
+    <div class="left">📡 VonCam</div>
+    <button class="btn ghost" id="btnRoleSettings">⚙ Bağlantı ayarları</button>
+  </div>
+  <div class="center-wrap">
+    <div style="text-align:center; width:100%;">
+      <h1 style="font-weight:600; margin-bottom:22px;">Bu cihaz ne olacak?</h1>
+      <div class="role-grid" style="margin:0 auto;">
+        <div class="role-card" id="roleCam">
+          <div class="icon">📷</div>
+          <h3>Kamera</h3>
+          <p>Bu cihazın kamerasını kayıt için kullan. Genelde telefon.</p>
+        </div>
+        <div class="role-card" id="roleView">
+          <div class="icon">🖥️</div>
+          <h3>İzleyici</h3>
+          <p>Bağlı kameraları yönet, uzaktan kayıt başlat, kayıtları izle.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ CAMERA SCREEN ============ -->
+<div class="screen" id="screen-camera">
+  <div class="cam-video-wrap">
+    <video id="camVideo" autoplay playsinline muted></video>
+    <canvas id="camCanvas" style="display:none;"></canvas>
+
+    <div class="cam-topbar">
+      <div class="cam-id-badge" id="camIdBadge">ID: ------</div>
+      <div class="cam-id-badge"><span class="dot on" id="camConnDot"></span> <span id="camConnLabel">bağlı</span></div>
+    </div>
+
+    <div class="rec-timer" id="recTimer"><span class="blink"></span> <span id="recTimerText">00:00</span></div>
+    <div class="cam-toast" id="camToast"></div>
+
+    <button class="icon-btn gear-btn" id="btnCamSettings" style="position:absolute; top:52px; right:16px;">⚙</button>
+
+    <div class="zoom-pop" id="zoomPop">
+      <span style="font-size:12px; color:var(--text-dim);">🔍</span>
+      <input type="range" id="zoomSlider" min="1" max="1" step="0.1" value="1">
+    </div>
+
+    <div class="cam-toolbar">
+      <button class="icon-btn" id="btnFlip" title="Kamerayı değiştir">🔄</button>
+      <button class="icon-btn" id="btnTorch" title="Fener">🔦</button>
+      <button class="icon-btn" id="btnZoomToggle" title="Yakınlaştır">🔍</button>
+      <button class="icon-btn rec" id="btnRecord" title="Kayıt"></button>
+    </div>
+  </div>
+
+  <div class="settings-sheet" id="camSettingsSheet">
+    <div class="sheet-body">
+      <h2>Kamera Ayarları</h2>
+      <div class="field">
+        <label>Kamera adı</label>
+        <input type="text" id="inpCamName" placeholder="Örn. Depo Girişi">
+      </div>
+      <div class="set-row">
+        <div><div class="lbl">Hareket algılayınca otomatik kayıt</div><div class="sub">Görüntüde belirgin değişim olunca kayda başlar</div></div>
+        <div class="switch" id="swMotion"></div>
+      </div>
+      <div class="set-row">
+        <div><div class="lbl">Kalite</div><div class="sub">Düşük kalite, dosyayı 20MB sınırının altında tutar</div></div>
+        <div class="seg" id="segQuality">
+          <button data-v="low" class="active">Düşük</button>
+          <button data-v="mid">Orta</button>
+          <button data-v="high">Yüksek</button>
+        </div>
+      </div>
+      <div class="set-row">
+        <div><div class="lbl">Maks. kayıt süresi</div><div class="sub">Otomatik durdurma süresi</div></div>
+        <div class="seg" id="segDuration">
+          <button data-v="15">15sn</button>
+          <button data-v="30" class="active">30sn</button>
+          <button data-v="60">60sn</button>
+        </div>
+      </div>
+      <div class="hint" style="margin-top:14px;">ℹ️ Kayıtlar Telegram üzerinden gönderilir. 20MB üstü dosyalar oynatılamaz, bu yüzden süreyi ve kaliteyi düşük tutmanız önerilir.</div>
+      <button class="btn block" style="margin-top:16px;" id="btnCamSettingsClose">Kapat</button>
+      <button class="btn ghost block" style="margin-top:8px;" id="btnCamChangeRole">Rolü / bağlantıyı değiştir</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ VIEWER SCREEN ============ -->
+<div class="screen" id="screen-viewer">
+  <div class="topbar">
+    <div class="left">🖥️ VonCam İzleyici <span class="chip" id="camCountChip">0 kamera</span></div>
+    <button class="btn ghost" id="btnViewerSettings">⚙ Bağlantı ayarları</button>
+  </div>
+  <div class="viewer-body">
+    <div class="sidebar" id="sidebar">
+      <div class="sidebar-head">Kameralar <span id="selCountLabel" style="color:var(--text-faint);"></span></div>
+      <div class="cam-list" id="camList">
+        <div class="empty-state">Henüz bağlı kamera yok.<br>Bir telefonda VonCam'ı açıp "Kamera" seçin.</div>
+      </div>
+      <div style="padding:12px; border-top:1px solid var(--border); display:flex; gap:8px;">
+        <button class="btn danger" style="flex:1;" id="btnRecordSel">● Kaydı Başlat</button>
+        <button class="btn" style="flex:1;" id="btnStopSel">■ Durdur</button>
+      </div>
+    </div>
+    <div class="main-area">
+      <div class="main-toolbar">
+        <div class="seg" id="mainTabs">
+          <button data-v="cams" class="active">Kameralar</button>
+          <button data-v="recs">Kayıtlar</button>
+        </div>
+        <button class="btn ghost" id="btnRefreshNow">↻ Yenile</button>
+      </div>
+      <div class="main-content" id="mainContent"></div>
+    </div>
+  </div>
+</div>
+
+<div class="video-modal" id="videoModal">
+  <div class="box">
+    <button class="icon-btn close" id="btnCloseVideo">✕</button>
+    <video id="modalVideo" controls autoplay></video>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ===================== STORAGE / STATE ===================== */
+const LS = {
+  token:'vc_token', chatId:'vc_chatid', role:'vc_role', camId:'vc_camid', camName:'vc_camname',
+  quality:'vc_quality', duration:'vc_duration', motion:'vc_motion'
+};
+function ls(k, v){ if(v===undefined) return localStorage.getItem(k); localStorage.setItem(k, v); }
+function lsNum(k, d){ const v = localStorage.getItem(k); return v===null? d : Number(v); }
+
+let TOKEN = ls(LS.token) || '';
+let CHAT_ID = ls(LS.chatId) || '';
+let ROLE = ls(LS.role) || '';
+let CAM_ID = ls(LS.camId) || '';
+if(!CAM_ID){ CAM_ID = Math.random().toString(36).slice(2,8); ls(LS.camId, CAM_ID); }
+let CAM_NAME = ls(LS.camName) || ('Kamera-'+CAM_ID);
+
+/* ===================== TELEGRAM WRAPPER ===================== */
+function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
+
+const tg = {
+  base(){ return `https://api.telegram.org/bot${TOKEN}`; },
+  fileBase(){ return `https://api.telegram.org/file/bot${TOKEN}`; },
+  async call(method, params={}, _retry){
+    const res = await fetch(`${this.base()}/${method}`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(params)
+    });
+    let data;
+    try{ data = await res.json(); }catch(e){ throw new Error('Telegram yanıtı okunamadı'); }
+    if(!data.ok){
+      if(data.error_code===429 && data.parameters && data.parameters.retry_after && !_retry){
+        await sleep(data.parameters.retry_after*1000 + 300);
+        return this.call(method, params, true);
+      }
+      if(typeof data.description==='string' && data.description.indexOf('message is not modified')>=0){
+        return null;
+      }
+      throw new Error(data.description || (method+' başarısız'));
+    }
+    return data.result;
+  },
+  async callForm(method, formData, _retry){
+    const res = await fetch(`${this.base()}/${method}`, { method:'POST', body:formData });
+    let data;
+    try{ data = await res.json(); }catch(e){ throw new Error('Telegram yanıtı okunamadı'); }
+    if(!data.ok){
+      if(data.error_code===429 && data.parameters && data.parameters.retry_after && !_retry){
+        await sleep(data.parameters.retry_after*1000 + 300);
+        return this.callForm(method, formData, true);
+      }
+      throw new Error(data.description || (method+' başarısız'));
+    }
+    return data.result;
+  },
+  sendMessage(text){ return this.call('sendMessage', {chat_id:CHAT_ID, text}); },
+  editMessageText(message_id, text){ return this.call('editMessageText', {chat_id:CHAT_ID, message_id, text}); },
+  pinChatMessage(message_id){ return this.call('pinChatMessage', {chat_id:CHAT_ID, message_id, disable_notification:true}); },
+  getChat(){ return this.call('getChat', {chat_id:CHAT_ID}); },
+  getFile(file_id){ return this.call('getFile', {file_id}); },
+  getUpdates(){ return this.call('getUpdates', {limit:10, timeout:0}); },
+  sendVideo(blob, filename){
+    const fd = new FormData(); fd.append('chat_id', CHAT_ID); fd.append('video', blob, filename); fd.append('supports_streaming','true');
+    return this.callForm('sendVideo', fd);
+  },
+  sendDocument(blob, filename){
+    const fd = new FormData(); fd.append('chat_id', CHAT_ID); fd.append('document', blob, filename);
+    return this.callForm('sendDocument', fd);
+  },
+  sendPhoto(blob){
+    const fd = new FormData(); fd.append('chat_id', CHAT_ID); fd.append('photo', blob, 'snap.jpg');
+    return this.callForm('sendPhoto', fd);
+  },
+  fileUrl(path){ return `${this.fileBase()}/${path}`; }
+};
+
+/* ===================== SHARED DB (pinned message) ===================== */
+const MAX_JSON_LEN = 3900;
+const MAX_RECS = 20;
+
+async function loadDB(){
+  const chat = await tg.getChat();
+  const pinned = chat.pinned_message;
+  if(pinned && typeof pinned.text==='string'){
+    try{
+      const obj = JSON.parse(pinned.text);
+      if(obj && typeof obj==='object'){ obj.__msgId = pinned.message_id; return obj; }
+    }catch(e){ /* fall through and recreate */ }
+  }
+  const initial = {v:2, cams:{}, cmds:{}, recs:[]};
+  const msg = await tg.sendMessage(JSON.stringify(initial));
+  try{ await tg.pinChatMessage(msg.message_id); }
+  catch(e){ console.warn('Sabitleme başarısız, çoklu cihaz keşfi çalışmayabilir:', e.message); }
+  initial.__msgId = msg.message_id;
+  return initial;
+}
+
+async function saveDB(db){
+  const msgId = db.__msgId;
+  const clone = {v:2, cams:db.cams||{}, cmds:db.cmds||{}, recs:db.recs||[]};
+  while(clone.recs.length > MAX_RECS) clone.recs.shift();
+  let text = JSON.stringify(clone);
+  while(text.length > MAX_JSON_LEN && clone.recs.length>0){ clone.recs.shift(); text = JSON.stringify(clone); }
+  await tg.editMessageText(msgId, text);
+  clone.__msgId = msgId;
+  return clone;
+}
+
+async function mutateDB(fn){
+  const db = await loadDB();
+  const msgId = db.__msgId; delete db.__msgId;
+  fn(db);
+  db.__msgId = msgId;
+  return await saveDB(db);
+}
+
+function nowB36(){ return Math.floor(Date.now()/1000).toString(36); }
+function b36ToDate(b){ return new Date(parseInt(b,36)*1000); }
+function fmtAgo(b){
+  const secs = Math.floor(Date.now()/1000) - parseInt(b,36);
+  if(secs<60) return secs+' sn önce';
+  if(secs<3600) return Math.floor(secs/60)+' dk önce';
+  if(secs<86400) return Math.floor(secs/3600)+' sa önce';
+  return Math.floor(secs/86400)+' gün önce';
+}
+function fmtDate(b){ return b36ToDate(b).toLocaleString('tr-TR'); }
+function fmtDuration(s){ const m=Math.floor(s/60), r=s%60; return (m>0? m+':'+String(r).padStart(2,'0') : s+'sn'); }
+
+/* ===================== SCREEN ROUTER ===================== */
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function goToStart(){
+  if(!TOKEN || !CHAT_ID){ showScreen('screen-setup'); return; }
+  if(ROLE==='cam'){ showScreen('screen-camera'); initCameraMode(); return; }
+  if(ROLE==='view'){ showScreen('screen-viewer'); initViewerMode(); return; }
+  showScreen('screen-role');
+}
+
+/* ===================== SETUP SCREEN ===================== */
+const infoPanel = document.getElementById('infoPanel');
+document.getElementById('btnToggleInfo').onclick = ()=> infoPanel.classList.toggle('open');
+
+document.getElementById('inpToken').value = TOKEN;
+document.getElementById('inpChatId').value = CHAT_ID;
+
+function setupError(msg){
+  const box = document.getElementById('setupError');
+  if(!msg){ box.style.display='none'; return; }
+  box.textContent = msg; box.style.display='block';
+}
+
+document.getElementById('btnFindChat').onclick = async ()=>{
+  const t = document.getElementById('inpToken').value.trim();
+  if(!t){ setupError('Önce bot token girin.'); return; }
+  const oldToken = TOKEN; TOKEN = t;
+  setupError('');
+  const btn = document.getElementById('btnFindChat');
+  btn.disabled = true; btn.textContent='Aranıyor...';
+  try{
+    const updates = await tg.getUpdates();
+    TOKEN = oldToken;
+    if(!updates || !updates.length){
+      setupError('Henüz bota bir mesaj gönderilmemiş. Telegram\'da bota "merhaba" yazıp tekrar deneyin.');
+      return;
+    }
+    const last = updates[updates.length-1];
+    const chat = (last.message && last.message.chat) || (last.channel_post && last.channel_post.chat);
+    if(chat && chat.id){ document.getElementById('inpChatId').value = chat.id; }
+    else setupError('Chat ID bulunamadı, elle girin.');
+  }catch(e){
+    TOKEN = oldToken;
+    setupError('Hata: '+e.message);
+  }finally{
+    btn.disabled=false; btn.textContent='Bul';
+  }
+};
+
+document.getElementById('btnSetupContinue').onclick = ()=>{
+  const t = document.getElementById('inpToken').value.trim();
+  const c = document.getElementById('inpChatId').value.trim();
+  if(!t || !c){ setupError('Token ve Chat ID gerekli.'); return; }
+  TOKEN = t; CHAT_ID = c;
+  ls(LS.token, TOKEN); ls(LS.chatId, CHAT_ID);
+  setupError('');
+  showScreen('screen-role');
+};
+
+document.getElementById('btnRoleSettings').onclick = ()=> showScreen('screen-setup');
+document.getElementById('btnViewerSettings').onclick = ()=> { teardownViewer(); showScreen('screen-setup'); };
+
+/* ===================== ROLE SCREEN ===================== */
+document.getElementById('roleCam').onclick = ()=>{ ROLE='cam'; ls(LS.role, ROLE); showScreen('screen-camera'); initCameraMode(); };
+document.getElementById('roleView').onclick = ()=>{ ROLE='view'; ls(LS.role, ROLE); showScreen('screen-viewer'); initViewerMode(); };
+
+/* ===================== CAMERA MODE ===================== */
+let camState = {
+  stream:null, track:null, facing:'environment', recorder:null, chunks:[],
+  recording:false, recTimerInt:null, recStartTs:0, recMaxTimeout:null,
+  motionOn: !!lsNum(LS.motion,0), quality: ls(LS.quality)||'low', duration: lsNum(LS.duration,30),
+  motionInt:null, snapInt:null, pollInt:null, lastFrame:null
+};
+const QUALITY_PRESETS = {
+  low:{w:480,h:270,bitrate:250000}, mid:{w:640,h:360,bitrate:500000}, high:{w:960,h:540,bitrate:900000}
+};
+
+function camToast(msg){
+  const el = document.getElementById('camToast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(el._t); el._t = setTimeout(()=>el.classList.remove('show'), 2600);
+}
+
+let camInited = false;
+async function initCameraMode(){
+  document.getElementById('camIdBadge').textContent = 'ID: '+CAM_ID;
+  document.getElementById('inpCamName').value = CAM_NAME;
+  setQualityUI(camState.quality); setDurationUI(camState.duration);
+  document.getElementById('swMotion').classList.toggle('on', camState.motionOn);
+  if(camInited) return;
+  camInited = true;
+  try{
+    await startCameraStream();
+  }catch(e){
+    camToast('Kamera açılamadı: '+e.message);
+  }
+  startHeartbeatLoop();
+  startMotionLoopIfNeeded();
+  startSnapshotLoop();
+}
+
+async function startCameraStream(){
+  if(camState.stream){ camState.stream.getTracks().forEach(t=>t.stop()); }
+  const preset = QUALITY_PRESETS[camState.quality];
+  const constraints = { audio:true, video:{ facingMode:{ideal:camState.facing}, width:{ideal:preset.w}, height:{ideal:preset.h} } };
+  const stream = await navigator.mediaDevices.getUserMedia(constraints);
+  camState.stream = stream;
+  document.getElementById('camVideo').srcObject = stream;
+  camState.track = stream.getVideoTracks()[0];
+  setupZoomControl();
+  setupTorchControl();
+}
+
+function setupZoomControl(){
+  const slider = document.getElementById('zoomSlider');
+  const caps = camState.track.getCapabilities ? camState.track.getCapabilities() : {};
+  if(caps && caps.zoom){
+    document.getElementById('btnZoomToggle').style.display='';
+    slider.min = caps.zoom.min; slider.max = caps.zoom.max; slider.step = caps.zoom.step || 0.1;
+    slider.value = caps.zoom.min;
+  }else{
+    document.getElementById('btnZoomToggle').style.display='none';
+    document.getElementById('zoomPop').classList.remove('show');
+  }
+}
+function applyZoom(v){
+  try{ camState.track.applyConstraints({advanced:[{zoom:Number(v)}]}); }catch(e){}
+}
+document.getElementById('zoomSlider').addEventListener('input', e=> applyZoom(e.target.value));
+document.getElementById('btnZoomToggle').onclick = ()=> document.getElementById('zoomPop').classList.toggle('show');
+
+let torchOn = false;
+function setupTorchControl(){
+  const caps = camState.track.getCapabilities ? camState.track.getCapabilities() : {};
+  document.getElementById('btnTorch').style.display = (caps && caps.torch) ? '' : 'none';
+  torchOn = false;
+  document.getElementById('btnTorch').classList.remove('active');
+}
+async function setTorch(state){
+  try{ await camState.track.applyConstraints({advanced:[{torch:state}]}); torchOn = state;
+    document.getElementById('btnTorch').classList.toggle('active', state);
+  }catch(e){ camToast('Fener desteklenmiyor'); }
+}
+document.getElementById('btnTorch').onclick = ()=> setTorch(!torchOn);
+
+document.getElementById('btnFlip').onclick = async ()=>{
+  camState.facing = camState.facing==='environment' ? 'user' : 'environment';
+  try{ await startCameraStream(); }catch(e){ camToast('Kamera değiştirilemedi'); }
+};
+
+document.getElementById('btnRecord').onclick = ()=> camState.recording ? stopRecording('manual') : startRecording('manual');
+
+function pickMime(){
+  const cands = ['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];
+  for(const c of cands){ if(window.MediaRecorder && MediaRecorder.isTypeSupported(c)) return c; }
+  return '';
+}
+
+function startRecording(source){
+  if(camState.recording || !camState.stream) return;
+  camState.chunks = [];
+  const preset = QUALITY_PRESETS[camState.quality];
+  const mime = pickMime();
+  try{
+    camState.recorder = new MediaRecorder(camState.stream, mime? {mimeType:mime, videoBitsPerSecond:preset.bitrate} : undefined);
+  }catch(e){ camToast('Kayıt başlatılamadı'); return; }
+  camState.recorder.ondataavailable = ev=>{ if(ev.data && ev.data.size>0) camState.chunks.push(ev.data); };
+  camState.recorder.onstop = ()=> onRecordingStopped();
+  camState.recorder.start();
+  camState.recording = true; camState.recStartTs = Date.now();
+  document.getElementById('btnRecord').classList.add('recording');
+  document.getElementById('recTimer').classList.add('show');
+  updateRecTimer();
+  camState.recTimerInt = setInterval(updateRecTimer, 1000);
+  camState.recMaxTimeout = setTimeout(()=>stopRecording('max'), camState.duration*1000);
+  camToast(source==='remote' ? 'Uzaktan kayıt komutu alındı' : (source==='motion' ? 'Hareket algılandı, kayıt başladı' : 'Kayıt başladı'));
+}
+function updateRecTimer(){
+  const secs = Math.floor((Date.now()-camState.recStartTs)/1000);
+  const m = Math.floor(secs/60), s = secs%60;
+  document.getElementById('recTimerText').textContent = String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+}
+function stopRecording(){
+  if(!camState.recording) return;
+  camState.recording = false;
+  clearInterval(camState.recTimerInt); clearTimeout(camState.recMaxTimeout);
+  document.getElementById('btnRecord').classList.remove('recording');
+  document.getElementById('recTimer').classList.remove('show');
+  try{ camState.recorder.stop(); }catch(e){}
+}
+async function onRecordingStopped(){
+  const durationSec = Math.round((Date.now()-camState.recStartTs)/1000);
+  const blob = new Blob(camState.chunks, {type: camState.recorder.mimeType || 'video/webm'});
+  camState.chunks = [];
+  if(blob.size < 500){ camToast('Kayıt çok kısa, atlandı'); return; }
+  camToast('Kayıt yükleniyor... ('+(Math.round(blob.size/1024))+' KB)');
+  let kind='v', result;
+  try{
+    result = await tg.sendVideo(blob, 'kayit_'+Date.now()+'.webm');
+  }catch(e){
+    try{ result = await tg.sendDocument(blob, 'kayit_'+Date.now()+'.webm'); kind='d'; }
+    catch(e2){ camToast('Yükleme başarısız: '+e2.message); return; }
+  }
+  const fileId = kind==='v' ? (result.video && result.video.file_id) : (result.document && result.document.file_id);
+  if(!fileId){ camToast('Dosya kimliği alınamadı'); return; }
+  try{
+    await mutateDB(db=>{
+      db.recs = db.recs || [];
+      db.recs.push({i:fileId, c:CAM_ID, t:nowB36(), d:durationSec, k:kind});
+    });
+    camToast('Kayıt tamamlandı ✓');
+  }catch(e){ camToast('Kayıt listeye eklenemedi: '+e.message); }
+}
+
+/* motion detection */
+function startMotionLoopIfNeeded(){
+  clearInterval(camState.motionInt);
+  if(!camState.motionOn) return;
+  const canvas = document.getElementById('camCanvas');
+  canvas.width = 64; canvas.height = 36;
+  const ctx = canvas.getContext('2d');
+  camState.lastFrame = null;
+  camState.motionInt = setInterval(()=>{
+    if(camState.recording) return;
+    const v = document.getElementById('camVideo');
+    if(!v.videoWidth) return;
+    ctx.drawImage(v,0,0,64,36);
+    const data = ctx.getImageData(0,0,64,36).data;
+    let sum=0;
+    for(let i=0;i<data.length;i+=4){ sum += data[i]+data[i+1]+data[i+2]; }
+    if(camState.lastFrame!==null){
+      const diff = Math.abs(sum - camState.lastFrame);
+      if(diff > 45000){ startRecording('motion'); }
+    }
+    camState.lastFrame = sum;
+  }, 600);
+}
+
+/* snapshot ("last view" for viewer, not true live) */
+function startSnapshotLoop(){
+  clearInterval(camState.snapInt);
+  camState.snapInt = setInterval(async ()=>{
+    try{
+      const v = document.getElementById('camVideo');
+      if(!v.videoWidth) return;
+      const c = document.createElement('canvas');
+      c.width = 320; c.height = Math.round(320 * v.videoHeight / v.videoWidth);
+      c.getContext('2d').drawImage(v,0,0,c.width,c.height);
+      const blob = await new Promise(res=> c.toBlob(res, 'image/jpeg', 0.5));
+      if(!blob) return;
+      const result = await tg.sendPhoto(blob);
+      const photos = result.photo;
+      const fileId = photos && photos[photos.length-1].file_id;
+      if(fileId){
+        await mutateDB(db=>{
+          db.cams = db.cams||{};
+          db.cams[CAM_ID] = db.cams[CAM_ID]||{};
+          db.cams[CAM_ID].s = fileId;
+        });
+      }
+    }catch(e){ /* silent, will retry next cycle */ }
+  }, 25000);
+}
+
+/* heartbeat + command polling */
+function startHeartbeatLoop(){
+  clearInterval(camState.pollInt);
+  const beat = async ()=>{
+    try{
+      const db = await mutateDB(db=>{
+        db.cams = db.cams||{};
+        db.cams[CAM_ID] = db.cams[CAM_ID] || {};
+        db.cams[CAM_ID].n = CAM_NAME;
+        db.cams[CAM_ID].ls = nowB36();
+        db.cams[CAM_ID].st = camState.recording ? 'rec' : 'idle';
+        db.cams[CAM_ID].m = camState.motionOn ? 1 : 0;
+      });
+      setConnStatus(true);
+      const cmd = db.cmds && db.cmds[CAM_ID];
+      if(cmd && !cmd.d){
+        await handleRemoteCommand(cmd);
+        try{
+          await mutateDB(db2=>{ if(db2.cmds && db2.cmds[CAM_ID]) db2.cmds[CAM_ID].d = 1; });
+        }catch(e){}
+      }
+    }catch(e){ setConnStatus(false); }
+  };
+  beat();
+  camState.pollInt = setInterval(beat, 5000);
+}
+async function handleRemoteCommand(cmd){
+  if(cmd.a==='rec_start' && !camState.recording) startRecording('remote');
+  else if(cmd.a==='rec_stop' && camState.recording) stopRecording();
+  else if(cmd.a==='facing'){ camState.facing = cmd.v; try{ await startCameraStream(); }catch(e){} camToast('Kamera uzaktan değiştirildi'); }
+  else if(cmd.a==='torch'){ await setTorch(!!cmd.v); camToast('Fener uzaktan '+(cmd.v?'açıldı':'kapatıldı')); }
+  else if(cmd.a==='zoom'){ applyZoom(cmd.v); document.getElementById('zoomSlider').value = cmd.v; }
+  else if(cmd.a==='motion'){ camState.motionOn = !!cmd.v; ls(LS.motion, camState.motionOn?1:0); document.getElementById('swMotion').classList.toggle('on', camState.motionOn); startMotionLoopIfNeeded(); camToast('Hareket algılama uzaktan '+(cmd.v?'açıldı':'kapatıldı')); }
+}
+function setConnStatus(ok){
+  document.getElementById('camConnDot').className = 'dot '+(ok?'on':'off');
+  document.getElementById('camConnLabel').textContent = ok?'bağlı':'bağlantı yok';
+}
+
+/* camera settings sheet */
+document.getElementById('btnCamSettings').onclick = ()=> document.getElementById('camSettingsSheet').classList.add('open');
+document.getElementById('btnCamSettingsClose').onclick = ()=>{
+  CAM_NAME = document.getElementById('inpCamName').value.trim() || CAM_NAME;
+  ls(LS.camName, CAM_NAME);
+  document.getElementById('camSettingsSheet').classList.remove('open');
+};
+document.getElementById('btnCamChangeRole').onclick = ()=>{
+  ROLE=''; ls(LS.role,'');
+  clearInterval(camState.pollInt); clearInterval(camState.motionInt); clearInterval(camState.snapInt);
+  if(camState.stream) camState.stream.getTracks().forEach(t=>t.stop());
+  camInited = false;
+  showScreen('screen-role');
+};
+document.getElementById('swMotion').onclick = ()=>{
+  camState.motionOn = !camState.motionOn; ls(LS.motion, camState.motionOn?1:0);
+  document.getElementById('swMotion').classList.toggle('on', camState.motionOn);
+  startMotionLoopIfNeeded();
+};
+function setQualityUI(v){
+  camState.quality = v; ls(LS.quality, v);
+  document.querySelectorAll('#segQuality button').forEach(b=>b.classList.toggle('active', b.dataset.v===v));
+}
+function setDurationUI(v){
+  camState.duration = Number(v); ls(LS.duration, v);
+  document.querySelectorAll('#segDuration button').forEach(b=>b.classList.toggle('active', b.dataset.v===String(v)));
+}
+document.getElementById('segQuality').addEventListener('click', e=>{
+  if(e.target.tagName==='BUTTON'){ setQualityUI(e.target.dataset.v); startCameraStream().catch(()=>{}); }
+});
+document.getElementById('segDuration').addEventListener('click', e=>{
+  if(e.target.tagName==='BUTTON') setDurationUI(e.target.dataset.v);
+});
+
+/* ===================== VIEWER MODE ===================== */
+let viewerState = { poll:null, tab:'cams', selected:new Set(), fileUrlCache:{} };
+
+async function initViewerMode(){
+  document.getElementById('mainTabs').onclick = e=>{
+    if(e.target.tagName!=='BUTTON') return;
+    viewerState.tab = e.target.dataset.v;
+    document.querySelectorAll('#mainTabs button').forEach(b=>b.classList.toggle('active', b===e.target));
+    renderMain();
+  };
+  document.getElementById('btnRefreshNow').onclick = ()=> refreshViewer();
+  document.getElementById('btnRecordSel').onclick = ()=> sendBulkCmd('rec_start');
+  document.getElementById('btnStopSel').onclick = ()=> sendBulkCmd('rec_stop');
+  document.getElementById('btnCloseVideo').onclick = ()=>{
+    document.getElementById('videoModal').classList.remove('open');
+    document.getElementById('modalVideo').pause();
+    document.getElementById('modalVideo').src='';
+  };
+  await refreshViewer();
+  clearInterval(viewerState.poll);
+  viewerState.poll = setInterval(refreshViewer, 6000);
+}
+function teardownViewer(){ clearInterval(viewerState.poll); }
+
+let lastDB = {cams:{}, recs:[]};
+async function refreshViewer(){
+  try{
+    const db = await loadDB();
+    lastDB = db;
+    document.getElementById('camCountChip').textContent = Object.keys(db.cams||{}).length+' kamera';
+    renderCamList(db.cams||{});
+    renderMain();
+  }catch(e){ camToastless(e); }
+}
+function camToastless(e){ console.warn('Viewer yenileme hatası:', e.message); }
+
+function renderCamList(cams){
+  const wrap = document.getElementById('camList');
+  const ids = Object.keys(cams);
+  if(!ids.length){ wrap.innerHTML = '<div class="empty-state">Henüz bağlı kamera yok.<br>Bir telefonda VonCam\'ı açıp "Kamera" seçin.</div>'; return; }
+  wrap.innerHTML = '';
+  ids.forEach(id=>{
+    const c = cams[id];
+    const online = (Math.floor(Date.now()/1000) - parseInt(c.ls||'0',36)) < 20;
+    const div = document.createElement('div');
+    div.className = 'cam-item'+(viewerState.selected.has(id)?' sel':'');
+    div.innerHTML = `
+      <div class="cam-thumb" id="thumb-${id}">📷</div>
+      <div class="cam-meta">
+        <div class="nm"><span class="dot ${online?'on':'off'}" style="display:inline-block;"></span> ${escapeHtml(c.n||id)}</div>
+        <div class="sub">${online? 'çevrimiçi' : fmtAgo(c.ls||'0')} ${c.st==='rec'?' · kayıtta':''}</div>
+      </div>`;
+    div.onclick = ()=>{
+      if(viewerState.selected.has(id)) viewerState.selected.delete(id); else viewerState.selected.add(id);
+      renderCamList(cams);
+    };
+    wrap.appendChild(div);
+    if(c.s) loadThumb(id, c.s);
+  });
+  document.getElementById('selCountLabel').textContent = viewerState.selected.size ? '('+viewerState.selected.size+' seçili)' : '';
+}
+async function loadThumb(camId, fileId){
+  try{
+    let url = viewerState.fileUrlCache[fileId];
+    if(!url){
+      const f = await tg.getFile(fileId);
+      url = tg.fileUrl(f.file_path);
+      viewerState.fileUrlCache[fileId] = url;
+    }
+    const el = document.getElementById('thumb-'+camId);
+    if(el) el.innerHTML = `<img src="${url}">`;
+  }catch(e){}
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+function renderMain(){
+  const el = document.getElementById('mainContent');
+  if(viewerState.tab==='cams') renderCamsTab(el); else renderRecsTab(el);
+}
+function renderCamsTab(el){
+  const cams = lastDB.cams||{};
+  const ids = Object.keys(cams);
+  if(!ids.length){ el.innerHTML = '<div class="empty-state">Kamera bekleniyor…</div>'; return; }
+  el.innerHTML = `<div class="note-banner">Görüntüler gerçek zamanlı canlı yayın değildir — her kamera yaklaşık 25 saniyede bir anlık görüntü gönderir.</div><div class="grid-cams" id="camsGrid"></div>`;
+  const grid = document.getElementById('camsGrid');
+  ids.forEach(id=>{
+    const c = cams[id];
+    const online = (Math.floor(Date.now()/1000) - parseInt(c.ls||'0',36)) < 20;
+    const card = document.createElement('div');
+    card.className = 'cam-card';
+    card.innerHTML = `
+      <div class="cam-preview" id="prev-${id}">📷</div>
+      <div class="cam-body">
+        <div class="cam-title"><span class="dot ${online?'on':'off'}"></span> ${escapeHtml(c.n||id)}</div>
+        <div class="cam-sub">${online?'çevrimiçi':'çevrimdışı'} · son görüntü ${c.ls?fmtAgo(c.ls):'—'} ${c.st==='rec'?' · 🔴 kayıtta':''}</div>
+        <div class="cam-controls">
+          <button class="icon-btn" title="Kamerayı değiştir" data-act="facing" data-id="${id}">🔄</button>
+          <button class="icon-btn" title="Fener" data-act="torch" data-id="${id}">🔦</button>
+          <button class="icon-btn" title="Hareket algılama" data-act="motion" data-id="${id}" style="background:${c.m?'var(--accent)':''}">👁</button>
+          <button class="icon-btn" title="Kayıt başlat/durdur" data-act="rec" data-id="${id}">${c.st==='rec'?'■':'●'}</button>
+        </div>
+      </div>`;
+    grid.appendChild(card);
+    if(c.s) loadPreview(id, c.s);
+  });
+  grid.querySelectorAll('[data-act]').forEach(btn=>{
+    btn.onclick = ()=> handleCardAction(btn.dataset.act, btn.dataset.id, cams[btn.dataset.id]);
+  });
+}
+async function loadPreview(camId, fileId){
+  try{
+    let url = viewerState.fileUrlCache[fileId];
+    if(!url){ const f = await tg.getFile(fileId); url = tg.fileUrl(f.file_path); viewerState.fileUrlCache[fileId]=url; }
+    const el = document.getElementById('prev-'+camId);
+    if(el) el.innerHTML = `<img src="${url}">`;
+  }catch(e){}
+}
+async function handleCardAction(act, id, cam){
+  if(act==='rec'){
+    await mutateDB(db=>{ db.cmds=db.cmds||{}; db.cmds[id] = {a: cam.st==='rec'?'rec_stop':'rec_start', t:nowB36(), d:0}; });
+  }else if(act==='facing'){
+    await mutateDB(db=>{ db.cmds=db.cmds||{}; db.cmds[id] = {a:'facing', v: 'toggle', t:nowB36(), d:0}; });
+    camToastGlobal('Kamera değiştirme komutu gönderildi');
+  }else if(act==='torch'){
+    await mutateDB(db=>{ db.cmds=db.cmds||{}; db.cmds[id] = {a:'torch', v: 1, t:nowB36(), d:0}; });
+    camToastGlobal('Fener komutu gönderildi');
+  }else if(act==='motion'){
+    const newVal = cam.m ? 0 : 1;
+    await mutateDB(db=>{ db.cmds=db.cmds||{}; db.cmds[id] = {a:'motion', v:newVal, t:nowB36(), d:0}; });
+    camToastGlobal('Hareket algılama komutu gönderildi');
+  }
+  refreshViewer();
+}
+function camToastGlobal(msg){ console.log(msg); }
+
+function renderRecsTab(el){
+  const recs = (lastDB.recs||[]).slice().reverse();
+  if(!recs.length){ el.innerHTML = '<div class="empty-state">Henüz kayıt yok.</div>'; return; }
+  const cams = lastDB.cams||{};
+  let rows = recs.map((r,idx)=>{
+    const camName = cams[r.c] ? escapeHtml(cams[r.c].n||r.c) : ('Bilinmeyen ('+r.c+')');
+    return `<tr>
+      <td>${camName}</td>
+      <td>${fmtDate(r.t)}</td>
+      <td>${fmtDuration(r.d)}</td>
+      <td>${r.k==='v'?'video':'dosya'}</td>
+      <td><button class="btn ghost" data-play="${idx}">▶ Oynat</button></td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = `
+    <div class="note-banner">Son ${recs.length} kayıt gösteriliyor (Telegram mesaj boyutu sınırı nedeniyle en fazla ${MAX_RECS}). Daha eski kayıtlar Telegram sohbetinizde saklı kalır.</div>
+    <table class="rec-table"><thead><tr><th>Kamera</th><th>Tarih</th><th>Süre</th><th>Tür</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+  el.querySelectorAll('[data-play]').forEach(btn=>{
+    btn.onclick = async ()=>{
+      const rec = recs[Number(btn.dataset.play)];
+      btn.textContent = 'Yükleniyor...'; btn.disabled = true;
+      try{
+        const f = await tg.getFile(rec.i);
+        const url = tg.fileUrl(f.file_path);
+        if(rec.k==='v'){
+          document.getElementById('modalVideo').src = url;
+          document.getElementById('videoModal').classList.add('open');
+        }else{
+          window.open(url, '_blank');
+        }
+      }catch(e){ alert('Dosya alınamadı: '+e.message+'\n(20MB üstü dosyalar Bot API ile indirilemez.)'); }
+      finally{ btn.textContent = '▶ Oynat'; btn.disabled = false; }
+    };
+  });
+}
+async function sendBulkCmd(action){
+  const ids = viewerState.selected.size ? Array.from(viewerState.selected) : Object.keys(lastDB.cams||{});
+  if(!ids.length){ alert('Kamera bulunamadı.'); return; }
+  await mutateDB(db=>{
+    db.cmds = db.cmds||{};
+    ids.forEach(id=>{ db.cmds[id] = {a:action, t:nowB36(), d:0}; });
+  });
+  refreshViewer();
+}
+
+/* facing toggle: camera side interprets 'toggle' value */
+const _origHandleCmd = handleRemoteCommand;
+handleRemoteCommand = async function(cmd){
+  if(cmd.a==='facing' && cmd.v==='toggle'){
+    camState.facing = camState.facing==='environment' ? 'user' : 'environment';
+    try{ await startCameraStream(); }catch(e){}
+    camToast('Kamera uzaktan değiştirildi');
+    return;
+  }
+  if(cmd.a==='torch'){
+    await setTorch(!torchOn);
+    camToast('Fener uzaktan değiştirildi');
+    return;
+  }
+  return _origHandleCmd(cmd);
+};
+
+/* ===================== BOOT ===================== */
+goToStart();
+
+})();
+</script>
+</body>
+</html>
