@@ -216,6 +216,7 @@
   .cell-btn.motion.active{background:var(--warn);border-color:var(--warn);color:#1a1300;}
   .cell-btn.privacy.active{background:#8b5cf6;border-color:#8b5cf6;}
   .cell-btn.sound.active{background:#0ea5b7;border-color:#0ea5b7;}
+  .cell-btn.listen.active{background:var(--accent);border-color:var(--accent);}
   .cam-row .rename-btn{
     width:22px;height:22px;flex-shrink:0;border-radius:6px;background:transparent;border:none;
     color:var(--text-faint);display:flex;align-items:center;justify-content:center;cursor:pointer;
@@ -520,9 +521,6 @@
         </button>
         <button class="pctrl-btn" id="ctrl-flash" title="Flaş">
           <svg class="icon toast-white" viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>
-        </button>
-        <button class="pctrl-btn" id="ctrl-mic" title="Mikrofon (varsayılan kapalı)">
-          <svg class="icon toast-white" viewBox="0 0 24 24"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><path d="M12 19v4M8 23h8"/></svg>
         </button>
       </div>
       <div class="phone-primary">
@@ -957,7 +955,7 @@ function startComputerMode(){
         const durOpts = [[0,"Sınırsız"],[30,"30sn"],[60,"1dk"],[300,"5dk"],[900,"15dk"],[1800,"30dk"]];
         const curDur = c.recDurationSec || 0;
         cell.innerHTML =
-          '<video autoplay playsinline></video>' +
+          '<video autoplay playsinline' + (c.listenOn ? '' : ' muted') + '></video>' +
           '<div class="cell-topbar">' +
             '<span class="live-badge"' + (online?'':' style="display:none"') + '><span class="b"></span>CANLI</span>' +
             '<span class="offline-badge"' + (online?' style="display:none"':'') + '>Bağlantı yok</span>' +
@@ -969,7 +967,8 @@ function startComputerMode(){
             '<button class="cell-btn" data-act="flash" title="Flaş"><svg class="icon-sm toast-white" viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg></button>' +
             '<button class="cell-btn" data-act="zoom" title="Yakınlaştırma"><svg class="icon-sm toast-white" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35M8 11h6M11 8v6"/></svg></button>' +
             '<button class="cell-btn motion' + (c.motionMode?" active":"") + '" data-act="motion" title="Hareket algılama modu"><svg class="icon-sm toast-white" viewBox="0 0 24 24"><path d="M2 12h4l2-7 4 14 2-7h8"/></svg></button>' +
-            '<button class="cell-btn sound' + (c.soundMode?" active":"") + '" data-act="sound" title="Ses modu (hareket algılanınca sesli uyarı ver)"><svg class="icon-sm toast-white" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7"/><path d="M18.5 5.5a9 9 0 010 13"/></svg></button>' +
+            '<button class="cell-btn sound' + (c.soundMode?" active":"") + '" data-act="sound" title="Hareket alarmı (algılanınca sesli uyarı ver)"><svg class="icon-sm toast-white" viewBox="0 0 24 24"><path d="M2 12h4l2-7 4 14 2-7h8"/><circle cx="19" cy="6" r="2.4"/></svg></button>' +
+            '<button class="cell-btn listen' + (c.listenOn?" active":"") + '" data-act="listen" title="Kamera mikrofonunu dinle (varsayılan kapalı)"><svg class="icon-sm toast-white" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7"/><path d="M18.5 5.5a9 9 0 010 13"/></svg></button>' +
             '<button class="cell-btn privacy' + (c.privacyOn?" active":"") + '" data-act="privacy" title="Gizli mod (telefon ekranı karartılır)"><svg class="icon-sm toast-white" viewBox="0 0 24 24"><path d="M17.94 17.94A10.94 10.94 0 0112 20c-7 0-10-8-10-8a18.6 18.6 0 015.06-5.94M9.9 4.24A10.94 10.94 0 0112 4c7 0 10 8 10 8a18.5 18.5 0 01-2.16 3.19M1 1l22 22"/><path d="M14.12 14.12a3 3 0 11-4.24-4.24"/></svg></button>' +
             '<div class="cell-spacer"></div>' +
             '<select class="rec-duration" title="Kayıt süresi (otomatik durdurma)">' +
@@ -1015,6 +1014,14 @@ function startComputerMode(){
           const on = !c.soundMode;
           c.soundMode = on;
           ev.currentTarget.classList.toggle("active", on);
+        });
+        cell.querySelector('[data-act="listen"]').addEventListener("click", (ev)=>{
+          const on = !c.listenOn;
+          c.listenOn = on;
+          ev.currentTarget.classList.toggle("active", on);
+          const v = cell.querySelector("video");
+          v.muted = !on;
+          if(on) v.play().catch(()=>{});
         });
         cell.querySelector('[data-act="privacy"]').addEventListener("click", (ev)=>{
           const on = !c.privacyOn;
@@ -1353,10 +1360,10 @@ function startCameraMode(){
   let netKey = null, peer = null, mqttClient = null;
   // "stream": izleyicilere gönderilen ve telefon önizlemesinde gösterilen NİHAİ akış
   //           (aşağıdaki dönüşüm canvas'ının video parçası + varsa mikrofon sesi).
-  // "camStream": kameradan gelen HAM akış (flaş/zoom/torch gibi donanım ayarları
-  //           hep bu ham parça üzerinden uygulanır, çünkü canvas parçası sanaldır).
-  // "micStream": mikrofon açıldığında alınan ham ses akışı.
-  let stream = null, camStream = null, micStream = null, micEnabled = false;
+  // "camStream": kameradan gelen HAM akış — hem görüntü hem de (izin varsa) mikrofon
+  //           sesi bunun içindedir; flaş/zoom gibi donanım ayarları hep bu ham
+  //           parça üzerinden uygulanır, çünkü canvas parçası sanaldır.
+  let stream = null, camStream = null;
   let facingMode = "environment", flashOn = false, zoomVal = 1;
   // Yönlendirme (dikey/yatay) düzeltmesi için kullanılan canvas boru hattı.
   let rawVideoEl = null, xCanvas = null, xCtx = null, canvasStream = null, drawRAFId = null;
@@ -1471,11 +1478,22 @@ function startCameraMode(){
     }
   }
 
+  // Görüntü her zaman istenir. Mikrofon de her zaman OTOMATİK olarak istenir
+  // (telefon tarafında ayrı bir "mikrofonu aç" düğmesi yoktur — ses zaten
+  // baştan akışın içindedir). İzin reddedilirse veya cihazda mikrofon yoksa
+  // hataya düşmeden sadece görüntüyle devam edilir.
   async function getStream(){
-    return navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: facingMode }, width:{ ideal:1280 }, height:{ ideal:720 } },
-      audio: false
-    });
+    try{
+      return await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: facingMode }, width:{ ideal:1280 }, height:{ ideal:720 } },
+        audio: true
+      });
+    }catch(e){
+      return navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: facingMode }, width:{ ideal:1280 }, height:{ ideal:720 } },
+        audio: false
+      });
+    }
   }
 
   /* ---------------- yön (dikey/yatay) düzeltme boru hattı ----------------
@@ -1532,16 +1550,16 @@ function startCameraMode(){
     xCtx.restore();
   }
 
-  // İzleyicilere giden / telefon önizlemesinde gösterilen akışı, mevcut
-  // canvas video parçası ile (mikrofon açıksa) mikrofon parçasından yeniden kurar.
+  // İzleyicilere giden / telefon önizlemesinde gösterilen akışı, canvas video
+  // parçası ile camStream'in ses parçasından (varsa) yeniden kurar.
   function rebuildOutStream(){
     const tracks = [];
     if(canvasStream){
       const vt = canvasStream.getVideoTracks()[0];
       if(vt) tracks.push(vt);
     }
-    if(micEnabled && micStream){
-      const at = micStream.getAudioTracks()[0];
+    if(camStream){
+      const at = camStream.getAudioTracks()[0];
       if(at) tracks.push(at);
     }
     stream = new MediaStream(tracks);
@@ -1554,10 +1572,19 @@ function startCameraMode(){
       const oldCamStream = camStream;
       camStream = newCamStream;
       setupCanvasPipeline();
+      rebuildOutStream();
+      // Canvas video parçasının kimliği kamera değişse de aynı kaldığı için görüntü
+      // tarafında yeniden bağlanmaya gerek yok. Ses parçası ise her seferinde yeni
+      // bir nesne olduğundan, halihazırda izleyen bağlantılara replaceTrack ile aktarılır.
+      const newAudioTrack = camStream.getAudioTracks()[0] || null;
+      if(newAudioTrack){
+        activeCalls.forEach(call=>{
+          const senders = call.peerConnection && call.peerConnection.getSenders();
+          const audioSender = senders && senders.find(s=>s.track && s.track.kind === "audio");
+          if(audioSender) audioSender.replaceTrack(newAudioTrack);
+        });
+      }
       if(oldCamStream) oldCamStream.getTracks().forEach(t=>t.stop());
-      // Canvas video parçasının kimliği kamera değişse de aynı kaldığı için
-      // izleyicilerle yeniden bağlantı kurmaya gerek yok; görüntü akışı olduğu
-      // gibi devam eder ve bir sonraki karede yeni kameradan beslenir.
     }catch(e){ showToast("Kamera değiştirilemedi"); console.warn(e); }
   }
 
@@ -1570,9 +1597,6 @@ function startCameraMode(){
     if(drawRAFId){ cancelAnimationFrame(drawRAFId); drawRAFId = null; }
     camStream.getTracks().forEach(t=>t.stop());
     camStream = null;
-    if(micStream){ micStream.getTracks().forEach(t=>t.stop()); micStream = null; }
-    micEnabled = false;
-    updateMicUI();
     if(canvasStream){ canvasStream.getTracks().forEach(t=>t.stop()); canvasStream = null; }
     stream = null;
     el("phone-video").srcObject = null;
@@ -1631,45 +1655,6 @@ function startCameraMode(){
   }
   el("ctrl-zoom-in").addEventListener("click", ()=>stepZoom(0.3));
   el("ctrl-zoom-out").addEventListener("click", ()=>stepZoom(-0.3));
-
-  /* ---------------- mikrofon (varsayılan kapalı) ----------------
-     Mikrofon kapalıyken hiç ses izni istenmez, akışa ses parçası eklenmez.
-     Açıldığında mikrofon izni istenir ve akış sese sahip olacak şekilde
-     yeniden kurulur; zaten izlemekte olan bilgisayarlarla bağlantı, yeni
-     parça (audio) iletilebilsin diye kısaca yenilenir. */
-  function updateMicUI(){
-    const btn = el("ctrl-mic");
-    if(btn) btn.classList.toggle("active", micEnabled);
-  }
-
-  async function setMicEnabled(on){
-    if(!camStream) return;
-    if(on){
-      if(!micStream){
-        try{
-          micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        }catch(e){
-          showToast("Mikrofon izni verilmedi");
-          return;
-        }
-      }
-      micEnabled = true;
-    } else {
-      micEnabled = false;
-      if(micStream){ micStream.getTracks().forEach(t=>t.stop()); micStream = null; }
-    }
-    rebuildOutStream();
-    updateMicUI();
-    showToast(micEnabled ? "Mikrofon açıldı" : "Mikrofon kapatıldı");
-    const viewerIds = Array.from(activeCalls.keys());
-    viewerIds.forEach(vid=>{
-      const call = activeCalls.get(vid);
-      if(call){ try{ call.close(); }catch(e){} activeCalls.delete(vid); }
-    });
-    viewerIds.forEach(vid=>callViewer(vid));
-  }
-
-  el("ctrl-mic").addEventListener("click", ()=>{ setMicEnabled(!micEnabled); });
 }
 
 })();
