@@ -215,6 +215,7 @@
   .rec-duration:focus{outline:none;}
   .cell-btn.motion.active{background:var(--warn);border-color:var(--warn);color:#1a1300;}
   .cell-btn.privacy.active{background:#8b5cf6;border-color:#8b5cf6;}
+  .cell-btn.sound.active{background:#0ea5b7;border-color:#0ea5b7;}
   .cam-row .rename-btn{
     width:22px;height:22px;flex-shrink:0;border-radius:6px;background:transparent;border:none;
     color:var(--text-faint);display:flex;align-items:center;justify-content:center;cursor:pointer;
@@ -519,6 +520,9 @@
         </button>
         <button class="pctrl-btn" id="ctrl-flash" title="Flaş">
           <svg class="icon toast-white" viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>
+        </button>
+        <button class="pctrl-btn" id="ctrl-mic" title="Mikrofon (varsayılan kapalı)">
+          <svg class="icon toast-white" viewBox="0 0 24 24"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><path d="M12 19v4M8 23h8"/></svg>
         </button>
       </div>
       <div class="phone-primary">
@@ -953,7 +957,7 @@ function startComputerMode(){
         const durOpts = [[0,"Sınırsız"],[30,"30sn"],[60,"1dk"],[300,"5dk"],[900,"15dk"],[1800,"30dk"]];
         const curDur = c.recDurationSec || 0;
         cell.innerHTML =
-          '<video autoplay playsinline muted></video>' +
+          '<video autoplay playsinline></video>' +
           '<div class="cell-topbar">' +
             '<span class="live-badge"' + (online?'':' style="display:none"') + '><span class="b"></span>CANLI</span>' +
             '<span class="offline-badge"' + (online?' style="display:none"':'') + '>Bağlantı yok</span>' +
@@ -965,6 +969,7 @@ function startComputerMode(){
             '<button class="cell-btn" data-act="flash" title="Flaş"><svg class="icon-sm toast-white" viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg></button>' +
             '<button class="cell-btn" data-act="zoom" title="Yakınlaştırma"><svg class="icon-sm toast-white" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35M8 11h6M11 8v6"/></svg></button>' +
             '<button class="cell-btn motion' + (c.motionMode?" active":"") + '" data-act="motion" title="Hareket algılama modu"><svg class="icon-sm toast-white" viewBox="0 0 24 24"><path d="M2 12h4l2-7 4 14 2-7h8"/></svg></button>' +
+            '<button class="cell-btn sound' + (c.soundMode?" active":"") + '" data-act="sound" title="Ses modu (hareket algılanınca sesli uyarı ver)"><svg class="icon-sm toast-white" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7"/><path d="M18.5 5.5a9 9 0 010 13"/></svg></button>' +
             '<button class="cell-btn privacy' + (c.privacyOn?" active":"") + '" data-act="privacy" title="Gizli mod (telefon ekranı karartılır)"><svg class="icon-sm toast-white" viewBox="0 0 24 24"><path d="M17.94 17.94A10.94 10.94 0 0112 20c-7 0-10-8-10-8a18.6 18.6 0 015.06-5.94M9.9 4.24A10.94 10.94 0 0112 4c7 0 10 8 10 8a18.5 18.5 0 01-2.16 3.19M1 1l22 22"/><path d="M14.12 14.12a3 3 0 11-4.24-4.24"/></svg></button>' +
             '<div class="cell-spacer"></div>' +
             '<select class="rec-duration" title="Kayıt süresi (otomatik durdurma)">' +
@@ -1005,6 +1010,11 @@ function startComputerMode(){
           c.motionMode = on;
           ev.currentTarget.classList.toggle("active", on);
           if(on) startMotionDetection(camId, c); else stopMotionDetection(c);
+        });
+        cell.querySelector('[data-act="sound"]').addEventListener("click", (ev)=>{
+          const on = !c.soundMode;
+          c.soundMode = on;
+          ev.currentTarget.classList.toggle("active", on);
         });
         cell.querySelector('[data-act="privacy"]').addEventListener("click", (ev)=>{
           const on = !c.privacyOn;
@@ -1116,6 +1126,34 @@ function startComputerMode(){
     startRecording(camId, c, false);
   }
 
+  /* ---------------- ses modu: hareket alarmı ----------------
+     "Ses modu" o kamera için açıkken hareket algılandığında bilgisayarda
+     kısa bir uyarı sesi (bip) çalınır. Ses, dosya gerektirmeden Web Audio
+     API ile anlık üretilir. Hareket sürerken sürekli ötmemesi için sadece
+     yeni bir hareket/kayıt döngüsü başladığında bir kez çalınır. */
+  let alarmAudioCtx = null;
+  function playMotionAlarm(){
+    try{
+      if(!alarmAudioCtx) alarmAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if(alarmAudioCtx.state === "suspended") alarmAudioCtx.resume();
+      const beepAt = (delayMs, freq)=>{
+        setTimeout(()=>{
+          const o = alarmAudioCtx.createOscillator();
+          const g = alarmAudioCtx.createGain();
+          o.type = "sine"; o.frequency.value = freq;
+          const t0 = alarmAudioCtx.currentTime;
+          g.gain.setValueAtTime(0.0001, t0);
+          g.gain.exponentialRampToValueAtTime(0.35, t0 + 0.02);
+          g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.28);
+          o.connect(g); g.connect(alarmAudioCtx.destination);
+          o.start(t0); o.stop(t0 + 0.3);
+        }, delayMs);
+      };
+      beepAt(0, 880);
+      beepAt(230, 660);
+    }catch(e){ /* tarayıcı Web Audio desteklemiyor olabilir */ }
+  }
+
   /* ---------------- hareket algılama modu ----------------
      Video karesi küçük bir canvas'a çizilip önceki kareyle piksel bazında
      karşılaştırılır. Ortalama fark eşik değerini aşarsa hareket algılanmış
@@ -1148,6 +1186,7 @@ function startComputerMode(){
           c.lastMotionTs = Date.now();
           if(!c.mediaRecorder || c.mediaRecorder.state !== "recording"){
             startRecording(camId, c, true);
+            if(c.soundMode) playMotionAlarm();
           }
         } else if(c.autoRecording && c.mediaRecorder && c.mediaRecorder.state === "recording"){
           if(Date.now() - c.lastMotionTs > MOTION_COOLDOWN_MS){
@@ -1312,7 +1351,15 @@ function startCameraMode(){
   el("phone-id-badge").textContent = "ID " + deviceId.slice(0,8);
 
   let netKey = null, peer = null, mqttClient = null;
-  let stream = null, facingMode = "environment", flashOn = false, zoomVal = 1;
+  // "stream": izleyicilere gönderilen ve telefon önizlemesinde gösterilen NİHAİ akış
+  //           (aşağıdaki dönüşüm canvas'ının video parçası + varsa mikrofon sesi).
+  // "camStream": kameradan gelen HAM akış (flaş/zoom/torch gibi donanım ayarları
+  //           hep bu ham parça üzerinden uygulanır, çünkü canvas parçası sanaldır).
+  // "micStream": mikrofon açıldığında alınan ham ses akışı.
+  let stream = null, camStream = null, micStream = null, micEnabled = false;
+  let facingMode = "environment", flashOn = false, zoomVal = 1;
+  // Yönlendirme (dikey/yatay) düzeltmesi için kullanılan canvas boru hattı.
+  let rawVideoEl = null, xCanvas = null, xCtx = null, canvasStream = null, drawRAFId = null;
   let viewers = 0;
   const activeCalls = new Map(); // viewerPeerId -> call
   const pendingViewers = new Set(); // viewerPeerId'ler (henüz yayın başlamamış olabilir)
@@ -1394,8 +1441,11 @@ function startCameraMode(){
       el("phone-privacy-overlay").classList.toggle("on", !!msg.value);
       return;
     }
-    if(!stream) return;
-    const track = stream.getVideoTracks()[0];
+    // Flaş ve zoom her zaman HAM kamera parçası (camStream) üzerinde uygulanır;
+    // izleyiciye giden "stream" artık sanal bir canvas parçası olduğu için
+    // torch/zoom gibi donanım kısıtlamalarını kabul etmez.
+    if(!camStream) return;
+    const track = camStream.getVideoTracks()[0];
     if(!track) return;
     if(msg.action === "flash"){
       const caps = track.getCapabilities ? track.getCapabilities() : {};
@@ -1428,28 +1478,102 @@ function startCameraMode(){
     });
   }
 
+  /* ---------------- yön (dikey/yatay) düzeltme boru hattı ----------------
+     Telefon tarayıcıları kamera karesini bazı cihazlarda fiziksel tutuşa göre
+     otomatik döndürmez; bu yüzden telefon dikey tutulsa bile yayın yatay
+     (veya tam tersi) çıkabilir ve izleyici tarafında doğru görüntü için
+     kafa/monitör eğmek gerekebilir. Bunu kesin olarak çözmek için ham kamera
+     görüntüsü görünmez bir <video>'ya bağlanır, her karede ekran yönüne
+     (screen.orientation.angle) göre bir <canvas>'a DOĞRU AÇIYLA çizilir ve
+     izleyicilere bu canvas'ın akışı (canvas.captureStream) gönderilir.
+     Böylece telefon dikey tutulunca dikey, yatay tutulunca yatay ve her
+     zaman düz (baş aşağı olmayan) görüntü gider — cihaz/tarayıcı farkı
+     gözetmeksizin. */
+  function getOrientAngle(){
+    if(screen.orientation && typeof screen.orientation.angle === "number") return screen.orientation.angle;
+    if(typeof window.orientation === "number"){
+      return ((window.orientation % 360) + 360) % 360;
+    }
+    return 0;
+  }
+
+  function setupCanvasPipeline(){
+    if(!rawVideoEl){
+      rawVideoEl = document.createElement("video");
+      rawVideoEl.autoplay = true; rawVideoEl.playsInline = true; rawVideoEl.muted = true;
+      rawVideoEl.style.cssText = "position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;";
+      document.body.appendChild(rawVideoEl);
+    }
+    rawVideoEl.srcObject = camStream;
+    if(!xCanvas){
+      xCanvas = document.createElement("canvas");
+      xCtx = xCanvas.getContext("2d");
+    }
+    if(!canvasStream){
+      canvasStream = xCanvas.captureStream(30);
+    }
+    if(!drawRAFId) drawFrame();
+  }
+
+  function drawFrame(){
+    drawRAFId = requestAnimationFrame(drawFrame);
+    if(!rawVideoEl || rawVideoEl.readyState < 2) return;
+    const sw = rawVideoEl.videoWidth, sh = rawVideoEl.videoHeight;
+    if(!sw || !sh) return;
+    const angle = getOrientAngle();
+    const swapped = (angle === 90 || angle === 270);
+    const cw = swapped ? sh : sw, ch = swapped ? sw : sh;
+    if(xCanvas.width !== cw || xCanvas.height !== ch){ xCanvas.width = cw; xCanvas.height = ch; }
+    xCtx.save();
+    xCtx.clearRect(0, 0, xCanvas.width, xCanvas.height);
+    xCtx.translate(xCanvas.width / 2, xCanvas.height / 2);
+    xCtx.rotate(angle * Math.PI / 180);
+    xCtx.drawImage(rawVideoEl, -sw / 2, -sh / 2, sw, sh);
+    xCtx.restore();
+  }
+
+  // İzleyicilere giden / telefon önizlemesinde gösterilen akışı, mevcut
+  // canvas video parçası ile (mikrofon açıksa) mikrofon parçasından yeniden kurar.
+  function rebuildOutStream(){
+    const tracks = [];
+    if(canvasStream){
+      const vt = canvasStream.getVideoTracks()[0];
+      if(vt) tracks.push(vt);
+    }
+    if(micEnabled && micStream){
+      const at = micStream.getAudioTracks()[0];
+      if(at) tracks.push(at);
+    }
+    stream = new MediaStream(tracks);
+    el("phone-video").srcObject = stream;
+  }
+
   async function restartStream(){
     try{
-      const newStream = await getStream();
-      const newTrack = newStream.getVideoTracks()[0];
-      const oldTrack = stream ? stream.getVideoTracks()[0] : null;
-      if(oldTrack) oldTrack.stop();
-      stream = newStream;
-      el("phone-video").srcObject = stream;
-      activeCalls.forEach(call=>{
-        const sender = call.peerConnection && call.peerConnection.getSenders().find(s=>s.track && s.track.kind === "video");
-        if(sender) sender.replaceTrack(newTrack);
-      });
+      const newCamStream = await getStream();
+      const oldCamStream = camStream;
+      camStream = newCamStream;
+      setupCanvasPipeline();
+      if(oldCamStream) oldCamStream.getTracks().forEach(t=>t.stop());
+      // Canvas video parçasının kimliği kamera değişse de aynı kaldığı için
+      // izleyicilerle yeniden bağlantı kurmaya gerek yok; görüntü akışı olduğu
+      // gibi devam eder ve bir sonraki karede yeni kameradan beslenir.
     }catch(e){ showToast("Kamera değiştirilemedi"); console.warn(e); }
   }
 
   function stopBroadcast(){
-    if(!stream) return;
+    if(!camStream) return;
     activeCalls.forEach(call=>{ try{ call.close(); }catch(e){} });
     activeCalls.clear();
     viewers = 0;
     updateViewers();
-    stream.getTracks().forEach(t=>t.stop());
+    if(drawRAFId){ cancelAnimationFrame(drawRAFId); drawRAFId = null; }
+    camStream.getTracks().forEach(t=>t.stop());
+    camStream = null;
+    if(micStream){ micStream.getTracks().forEach(t=>t.stop()); micStream = null; }
+    micEnabled = false;
+    updateMicUI();
+    if(canvasStream){ canvasStream.getTracks().forEach(t=>t.stop()); canvasStream = null; }
     stream = null;
     el("phone-video").srcObject = null;
     el("phone-placeholder").classList.remove("hidden");
@@ -1458,10 +1582,11 @@ function startCameraMode(){
   }
 
   async function startBroadcast(){
-    if(stream) return;
+    if(camStream) return;
     try{
-      stream = await getStream();
-      el("phone-video").srcObject = stream;
+      camStream = await getStream();
+      setupCanvasPipeline();
+      rebuildOutStream();
       el("phone-placeholder").classList.add("hidden");
       el("broadcast-label").textContent = "Yayını Durdur";
       el("btn-broadcast").classList.add("stop");
@@ -1473,7 +1598,7 @@ function startCameraMode(){
   }
 
   el("btn-broadcast").addEventListener("click", ()=>{
-    if(stream) stopBroadcast(); else startBroadcast();
+    if(camStream) stopBroadcast(); else startBroadcast();
   });
 
   // Bu cihaz "Kamera" rolünü seçtiği anda, düğmeye basmaya gerek kalmadan
@@ -1481,14 +1606,14 @@ function startCameraMode(){
   startBroadcast();
 
   el("ctrl-switch").addEventListener("click", async ()=>{
-    if(!stream) return;
+    if(!camStream) return;
     facingMode = (facingMode === "environment") ? "user" : "environment";
     await restartStream();
   });
 
   el("ctrl-flash").addEventListener("click", async ()=>{
-    if(!stream) return;
-    const track = stream.getVideoTracks()[0];
+    if(!camStream) return;
+    const track = camStream.getVideoTracks()[0];
     const caps = track.getCapabilities ? track.getCapabilities() : {};
     if(!caps.torch){ showToast("Bu cihazda flaş desteklenmiyor"); return; }
     flashOn = !flashOn;
@@ -1497,8 +1622,8 @@ function startCameraMode(){
   });
 
   function stepZoom(delta){
-    if(!stream) return;
-    const track = stream.getVideoTracks()[0];
+    if(!camStream) return;
+    const track = camStream.getVideoTracks()[0];
     const caps = track.getCapabilities ? track.getCapabilities() : {};
     if(!caps.zoom){ showToast("Bu cihazda yakınlaştırma desteklenmiyor"); return; }
     zoomVal = Math.min(caps.zoom.max, Math.max(caps.zoom.min, zoomVal + delta));
@@ -1506,6 +1631,45 @@ function startCameraMode(){
   }
   el("ctrl-zoom-in").addEventListener("click", ()=>stepZoom(0.3));
   el("ctrl-zoom-out").addEventListener("click", ()=>stepZoom(-0.3));
+
+  /* ---------------- mikrofon (varsayılan kapalı) ----------------
+     Mikrofon kapalıyken hiç ses izni istenmez, akışa ses parçası eklenmez.
+     Açıldığında mikrofon izni istenir ve akış sese sahip olacak şekilde
+     yeniden kurulur; zaten izlemekte olan bilgisayarlarla bağlantı, yeni
+     parça (audio) iletilebilsin diye kısaca yenilenir. */
+  function updateMicUI(){
+    const btn = el("ctrl-mic");
+    if(btn) btn.classList.toggle("active", micEnabled);
+  }
+
+  async function setMicEnabled(on){
+    if(!camStream) return;
+    if(on){
+      if(!micStream){
+        try{
+          micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        }catch(e){
+          showToast("Mikrofon izni verilmedi");
+          return;
+        }
+      }
+      micEnabled = true;
+    } else {
+      micEnabled = false;
+      if(micStream){ micStream.getTracks().forEach(t=>t.stop()); micStream = null; }
+    }
+    rebuildOutStream();
+    updateMicUI();
+    showToast(micEnabled ? "Mikrofon açıldı" : "Mikrofon kapatıldı");
+    const viewerIds = Array.from(activeCalls.keys());
+    viewerIds.forEach(vid=>{
+      const call = activeCalls.get(vid);
+      if(call){ try{ call.close(); }catch(e){} activeCalls.delete(vid); }
+    });
+    viewerIds.forEach(vid=>callViewer(vid));
+  }
+
+  el("ctrl-mic").addEventListener("click", ()=>{ setMicEnabled(!micEnabled); });
 }
 
 })();
