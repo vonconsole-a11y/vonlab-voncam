@@ -1137,28 +1137,45 @@ function startComputerMode(){
      "Ses modu" o kamera için açıkken hareket algılandığında bilgisayarda
      kısa bir uyarı sesi (bip) çalınır. Ses, dosya gerektirmeden Web Audio
      API ile anlık üretilir. Hareket sürerken sürekli ötmemesi için sadece
-     yeni bir hareket/kayıt döngüsü başladığında bir kez çalınır. */
+     yeni bir hareket/kayıt döngüsü başladığında bir kez çalınır.
+     ÖNEMLİ: Tarayıcılar, kullanıcı sayfayla hiç etkileşime girmeden önce
+     otomatik ses çalınmasını engeller. Bu yüzden ses bağlamı (AudioContext)
+     sayfadaki İLK tıklama/dokunma/tuş anında (aşağıdaki dinleyiciyle) önceden
+     kilitten kurtarılıyor; aksi halde hareket algılandığında (bir zamanlayıcı
+     içinden, yani gerçek bir kullanıcı eylemi olmadan) çalınmaya çalışılan
+     ses tarayıcı tarafından sessizce engellenir ve hiç duyulmaz. */
   let alarmAudioCtx = null;
+  function ensureAlarmAudioCtx(){
+    if(!alarmAudioCtx){
+      try{ alarmAudioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch(e){ return null; }
+    }
+    if(alarmAudioCtx.state === "suspended"){ alarmAudioCtx.resume().catch(()=>{}); }
+    return alarmAudioCtx;
+  }
+  ["click","touchstart","keydown"].forEach(evt=>{
+    document.addEventListener(evt, ensureAlarmAudioCtx, { passive:true });
+  });
+
   function playMotionAlarm(){
-    try{
-      if(!alarmAudioCtx) alarmAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      if(alarmAudioCtx.state === "suspended") alarmAudioCtx.resume();
-      const beepAt = (delayMs, freq)=>{
-        setTimeout(()=>{
-          const o = alarmAudioCtx.createOscillator();
-          const g = alarmAudioCtx.createGain();
-          o.type = "sine"; o.frequency.value = freq;
-          const t0 = alarmAudioCtx.currentTime;
-          g.gain.setValueAtTime(0.0001, t0);
-          g.gain.exponentialRampToValueAtTime(0.35, t0 + 0.02);
-          g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.28);
-          o.connect(g); g.connect(alarmAudioCtx.destination);
-          o.start(t0); o.stop(t0 + 0.3);
-        }, delayMs);
-      };
-      beepAt(0, 880);
-      beepAt(230, 660);
-    }catch(e){ /* tarayıcı Web Audio desteklemiyor olabilir */ }
+    const ctx = ensureAlarmAudioCtx();
+    if(!ctx) return;
+    const beepAt = (delayMs, freq)=>{
+      setTimeout(()=>{
+        if(ctx.state === "suspended") ctx.resume().catch(()=>{});
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = "sine"; o.frequency.value = freq;
+        const t0 = ctx.currentTime;
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(0.5, t0 + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.28);
+        o.connect(g); g.connect(ctx.destination);
+        o.start(t0); o.stop(t0 + 0.3);
+      }, delayMs);
+    };
+    beepAt(0, 880);
+    beepAt(230, 660);
   }
 
   /* ---------------- hareket algılama modu ----------------
@@ -1501,18 +1518,22 @@ function startCameraMode(){
      otomatik döndürmez; bu yüzden telefon dikey tutulsa bile yayın yatay
      (veya tam tersi) çıkabilir ve izleyici tarafında doğru görüntü için
      kafa/monitör eğmek gerekebilir. Bunu kesin olarak çözmek için ham kamera
-     görüntüsü görünmez bir <video>'ya bağlanır, her karede ekran yönüne
-     (screen.orientation.angle) göre bir <canvas>'a DOĞRU AÇIYLA çizilir ve
-     izleyicilere bu canvas'ın akışı (canvas.captureStream) gönderilir.
-     Böylece telefon dikey tutulunca dikey, yatay tutulunca yatay ve her
-     zaman düz (baş aşağı olmayan) görüntü gider — cihaz/tarayıcı farkı
-     gözetmeksizin. */
-  function getOrientAngle(){
-    if(screen.orientation && typeof screen.orientation.angle === "number") return screen.orientation.angle;
-    if(typeof window.orientation === "number"){
-      return ((window.orientation % 360) + 360) % 360;
-    }
-    return 0;
+     görüntüsü görünmez bir <video>'ya bağlanır, her karede bir <canvas>'a
+     DOĞRU AÇIYLA çizilir ve izleyicilere bu canvas'ın akışı (canvas.captureStream)
+     gönderilir. Böylece telefon dikey tutulunca dikey, yatay tutulunca yatay
+     görüntü gider.
+     NOT: Önceki sürüm dönüş açısını screen.orientation.angle'dan okuyordu,
+     ama bu değer birçok telefon/tarayıcıda güncellenmiyor (hep 0 kalıyor),
+     bu yüzden hiçbir şey değişmiyormuş gibi görünüyordu. Şimdi bunun yerine
+     kameradan gelen HAM karenin (dikey mi yatay mı) gerçek pencere/ekran
+     şekliyle (dikey mi yatay mı) KARŞILAŞTIRILMASINA dayanıyor — bu, herhangi
+     bir tarayıcı API'sine güvenmediği için çok daha güvenilir çalışır. */
+  const ROTATE_SIGN = 1; // Görüntü ters yöne (sağa gerekirken sola) dönerse bunu -1 yapın.
+  function getFrameRotationDeg(sw, sh){
+    const uiLandscape = window.innerWidth > window.innerHeight;
+    const frameLandscape = sw >= sh;
+    if(uiLandscape === frameLandscape) return 0; // şekiller zaten uyumlu, döndürme gerekmez
+    return (uiLandscape ? -90 : 90) * ROTATE_SIGN;
   }
 
   function setupCanvasPipeline(){
@@ -1538,14 +1559,14 @@ function startCameraMode(){
     if(!rawVideoEl || rawVideoEl.readyState < 2) return;
     const sw = rawVideoEl.videoWidth, sh = rawVideoEl.videoHeight;
     if(!sw || !sh) return;
-    const angle = getOrientAngle();
-    const swapped = (angle === 90 || angle === 270);
+    const rot = getFrameRotationDeg(sw, sh);
+    const swapped = (rot === 90 || rot === -90);
     const cw = swapped ? sh : sw, ch = swapped ? sw : sh;
     if(xCanvas.width !== cw || xCanvas.height !== ch){ xCanvas.width = cw; xCanvas.height = ch; }
     xCtx.save();
     xCtx.clearRect(0, 0, xCanvas.width, xCanvas.height);
     xCtx.translate(xCanvas.width / 2, xCanvas.height / 2);
-    xCtx.rotate(angle * Math.PI / 180);
+    xCtx.rotate(rot * Math.PI / 180);
     xCtx.drawImage(rawVideoEl, -sw / 2, -sh / 2, sw, sh);
     xCtx.restore();
   }
